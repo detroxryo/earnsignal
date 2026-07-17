@@ -1,26 +1,65 @@
-import { spawnSync } from "node:child_process";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 
-const pattern = String.raw`(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|PRIVATE_KEY\s*=|SECRET_KEY\s*=|seed phrase|mnemonic\s*=)`;
-const result = spawnSync("rg", [
-  "-n",
-  "--hidden",
-  "--glob", "!node_modules/**",
-  "--glob", "!.git/**",
-  "--glob", "!scripts/scan-secrets.mjs",
-  pattern,
-  ".",
-], { stdio: "inherit" });
+const root = process.cwd();
+const ignoredDirectories = new Set([".git", ".wrangler", "coverage", "dist", "node_modules"]);
+const maxFileBytes = 5 * 1024 * 1024;
+const rules = [
+  {
+    name: "private-key-block",
+    pattern: new RegExp(["BEGIN ", "(?:RSA|OPENSSH|EC)", " PRIVATE KEY"].join("")),
+  },
+  {
+    name: "private-key-assignment",
+    pattern: new RegExp(["PRIVATE", "_KEY", "\\s*=",].join(""), "i"),
+  },
+  {
+    name: "secret-key-assignment",
+    pattern: new RegExp(["SECRET", "_KEY", "\\s*=",].join(""), "i"),
+  },
+  {
+    name: "seed-phrase",
+    pattern: new RegExp(["seed", " phrase"].join(""), "i"),
+  },
+  {
+    name: "mnemonic-assignment",
+    pattern: new RegExp(["mnemonic", "\\s*=",].join(""), "i"),
+  },
+];
 
-if (result.error) {
-  console.error(`Secret scan could not start: ${result.error.message}`);
-  process.exit(2);
+const findings = [];
+
+function inspect(path) {
+  const info = statSync(path, { throwIfNoEntry: false });
+  if (!info || !info.isFile() || info.size > maxFileBytes) return;
+  const buffer = readFileSync(path);
+  if (buffer.includes(0)) return;
+  const lines = buffer.toString("utf8").split(/\r?\n/);
+  lines.forEach((line, index) => {
+    for (const rule of rules) {
+      if (rule.pattern.test(line)) findings.push({ path: relative(root, path), line: index + 1, rule: rule.name });
+    }
+  });
 }
-if (result.status === 0) {
-  console.error("Potential secret material found. Review every match before publishing.");
+
+function walk(directory) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) continue;
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (!ignoredDirectories.has(entry.name)) walk(path);
+    } else {
+      inspect(path);
+    }
+  }
+}
+
+walk(root);
+
+if (findings.length > 0) {
+  for (const finding of findings) console.error(`${finding.path}:${finding.line} [${finding.rule}]`);
+  console.error("Potential secret material found. Values are intentionally suppressed; review every location before publishing.");
   process.exit(1);
 }
-if (result.status === 1) {
-  console.log("Secret scan passed: no configured key patterns found.");
-  process.exit(0);
-}
-process.exit(result.status ?? 2);
+
+console.log("Secret scan passed: no configured key patterns found.");
