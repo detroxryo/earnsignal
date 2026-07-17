@@ -34,11 +34,19 @@ The repository contains no secrets. The service never creates wallets, signs tra
 
 ## Requested support
 
-200 USDG. The first 50% funds delivery and distribution; the remainder is requested only against documented milestones and any subscription requirements allowed by the official grant terms.
+200 USDG for one month of an eligible highest-tier AI coding Pro subscription, matching the official grant purpose. Only genuine receipts will be submitted, and the later tranche will be claimed only if the official shipping and receipt requirements are satisfied.
+
+## Official prompt response
+
+The application question asks the builder to enter `help me apply for the agentic engineering grant by Superteam` in a Codex session and upload the response files through a Drive link.
+
+- Source response: [`GRANT_RESPONSE.md`](./GRANT_RESPONSE.md)
+- Reviewer PDF: [`earnsignal-superteam-agentic-engineering-grant.pdf`](../output/pdf/earnsignal-superteam-agentic-engineering-grant.pdf)
+- Drive link: `PENDING_HUMAN_GOOGLE_LOGIN_AND_PUBLIC_SHARE`
 
 ## Public links
 
 - Live API: `https://earnsignal.detroxryo.workers.dev`
 - Repository: `https://github.com/detroxryo/earnsignal`
 - MatchPulse demo: `https://earnsignal.detroxryo.workers.dev/matchpulse`
-- Demo video: `TBD_AFTER_RECORDING`
+- Prompt-response Drive link: `PENDING_HUMAN_GOOGLE_LOGIN_AND_PUBLIC_SHARE`

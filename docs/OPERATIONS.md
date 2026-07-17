@@ -49,6 +49,7 @@ All times are relative to mission start. Automated checks may continue unattende
 ```bash
 curl "$BASE_URL/health"
 curl "$BASE_URL/v1/opportunities/top"
+curl -H "Authorization: Bearer $ADMIN_TOKEN" "$BASE_URL/admin/readiness"
 curl -H "Authorization: Bearer $ADMIN_TOKEN" "$BASE_URL/admin/reports/daily"
 ```
 

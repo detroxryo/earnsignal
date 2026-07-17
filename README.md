@@ -11,6 +11,16 @@ The system never signs transactions, sends funds, deploys contracts, approves to
 - Operator console: <https://earnsignal.detroxryo.workers.dev/admin> (Bearer-protected data)
 - Current public status: payments and TxLINE live capture remain disabled until their human wallet checkpoints are completed; discovery, scoring, Workers AI, reports, and both Cron triggers are live.
 
+## 60-second reviewer path
+
+1. Open [health](https://earnsignal.detroxryo.workers.dev/health) to verify production, D1, and activation flags.
+2. Open the [ranked opportunity feed](https://earnsignal.detroxryo.workers.dev/v1/opportunities/top) to inspect deterministic low-risk candidates.
+3. Open [MatchPulse](https://earnsignal.detroxryo.workers.dev/matchpulse) to review the no-betting and accessibility boundary.
+4. Read the [daily evidence report](./docs/REPORT_2026-07-17.md) and inspect the test suite for payment, scoring, Cron, source, and page guards.
+5. Read the [official Grant prompt response](./docs/GRANT_RESPONSE.md) for the next 30-day Solana delivery plan.
+
+![MatchPulse production interface](./docs/qa/assets/matchpulse-desktop-after.png)
+
 ## What is implemented
 
 - Hourly opportunity discovery from the authenticated Superteam Agent API, GitHub Search, and CDP Bazaar, plus a curated official-opportunity registry.
@@ -37,6 +47,7 @@ The system never signs transactions, sends funds, deploys contracts, approves to
 | POST | `/v1/matchpulse/brief` | Public | Bilingual, no-betting event explanation |
 | GET | `/admin` | Public shell | Browser operator console; protected data still requires Bearer auth |
 | GET | `/admin/reports/daily` | Bearer | Four daily reports |
+| GET | `/admin/readiness` | Bearer | Secret-safe activation checklist for x402, TxLINE, and submissions |
 | POST | `/admin/discovery/run` | Bearer | Manual discovery trigger |
 | POST | `/admin/reports/generate` | Bearer | Idempotent daily report generation |
 | POST | `/admin/matchpulse/capture/:fixtureId` | Bearer | Capture official TxLINE score events |
@@ -124,7 +135,9 @@ Self-tests, internal transfers, testnet assets, excluded transactions, and pendi
 
 - [Security boundaries](./SECURITY.md)
 - [72-hour operator runbook](./docs/OPERATIONS.md)
+- [Activation checkpoints](./docs/ACTIVATION_CHECKPOINTS.md)
 - [Grant application draft](./docs/SUPERTEAM_GRANT.md)
+- [Official Grant prompt response](./docs/GRANT_RESPONSE.md) and [reviewer PDF](./output/pdf/earnsignal-superteam-agentic-engineering-grant.pdf)
 - [MatchPulse submission draft](./docs/TXODDS_SUBMISSION.md)
 - [Ethical outreach templates](./docs/OUTREACH.md)
 - [2026-07-17 opportunity, execution, revenue, and improvement report](./docs/REPORT_2026-07-17.md)

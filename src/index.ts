@@ -12,6 +12,7 @@ import type { AppBindings } from "./env";
 import { assertTransition, cronExecutionKey, executionStates, type ExecutionState } from "./execution";
 import { MATCHPULSE_HTML } from "./matchpulse-page";
 import { capturePaymentSettlement, requireX402 } from "./payments";
+import { buildReadiness } from "./readiness";
 import { generateDailyReport, getLatestDailyReport } from "./reports";
 import { scoreOpportunity } from "./scoring";
 import {
@@ -202,6 +203,16 @@ app.use("/admin/*", requireAdmin);
 app.get("/admin/reports/daily", async (context) => {
   const report = await getLatestDailyReport(context.env.DB) ?? await generateDailyReport(context.env.DB);
   return context.json(report);
+});
+app.get("/admin/readiness", async (context) => {
+  let databaseReady = false;
+  try {
+    await context.env.DB.prepare("SELECT 1 AS ok").first();
+    databaseReady = true;
+  } catch {
+    databaseReady = false;
+  }
+  return context.json(buildReadiness(context.env, databaseReady));
 });
 app.post("/admin/discovery/run", async (context) => context.json(await runDiscovery(context.env)));
 app.post("/admin/reports/generate", async (context) => context.json(await generateDailyReport(context.env.DB)));
