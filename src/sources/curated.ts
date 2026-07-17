@@ -1,0 +1,86 @@
+import type { NormalizedOpportunity } from "../domain";
+import { stableId } from "../util";
+
+export async function discoverCurated(): Promise<NormalizedOpportunity[]> {
+  const rows = [
+    {
+      externalId: "superteam-agentic-engineering-2026",
+      title: "Superteam Agentic Engineering Grant",
+      officialUrl: "https://superteam.fun/earn/grants/agentic-engineering",
+      rewardUsd: 200,
+      deadline: null,
+      successProbability: 0.3,
+      timeHours: 2,
+      payoutEvidence: 0.9,
+      reputation: 0.9,
+      capitalSafety: 1,
+      skillFit: 0.95,
+      deadlineFit: 0.95,
+      competitionLevel: 0.55,
+      repeatability: 0.8,
+      technicalDifficulty: "MEDIUM" as const,
+      evidence: [
+        "Official Superteam listing states a 200 USDG grant.",
+        "EarnSignal and MatchPulse produce reusable agent-engineering artifacts.",
+      ],
+    },
+    {
+      externalId: "txodds-consumer-fan-experiences-2026",
+      title: "TxODDS Consumer & Fan Experiences Hackathon",
+      officialUrl: "https://superteam.fun/earn/listing/consumer-and-fan-experiences/",
+      rewardUsd: 10_000,
+      deadline: "2026-07-19T23:59:00.000Z",
+      successProbability: 0.05,
+      timeHours: 24,
+      payoutEvidence: 0.9,
+      reputation: 0.85,
+      capitalSafety: 1,
+      skillFit: 0.95,
+      deadlineFit: 0.85,
+      competitionLevel: 0.7,
+      repeatability: 0.85,
+      technicalDifficulty: "HIGH" as const,
+      evidence: [
+        "Official Superteam listing states 10k/4k/2k USDT prizes.",
+        "MatchPulse is restricted to non-betting fan explanations and accessibility.",
+      ],
+    },
+  ];
+
+  return Promise.all(rows.map(async (row) => ({
+    id: await stableId("opp", `CURATED:${row.externalId}`),
+    source: "CURATED",
+    externalId: row.externalId,
+    title: row.title,
+    officialUrl: row.officialUrl,
+    rewardUsd: row.rewardUsd,
+    rewardCurrency: row.externalId.startsWith("txodds") ? "USDT" : "USDG",
+    deadline: row.deadline,
+    input: {
+      title: row.title,
+      source: "CURATED",
+      officialUrl: row.officialUrl,
+      rewardUsd: row.rewardUsd,
+      successProbability: row.successProbability,
+      directCostUsd: 0,
+      gasUsd: 0,
+      timeHours: row.timeHours,
+      payoutEvidence: row.payoutEvidence,
+      reputation: row.reputation,
+      capitalSafety: row.capitalSafety,
+      skillFit: row.skillFit,
+      deadlineFit: row.deadlineFit,
+      competitionLevel: row.competitionLevel,
+      repeatability: row.repeatability,
+      technicalDifficulty: row.technicalDifficulty,
+      deadline: row.deadline,
+      hardRisks: [],
+      evidence: row.evidence,
+    },
+    raw: {
+      maintainedBy: "EarnSignal curated registry",
+      verificationRequiredBeforeSubmission: true,
+      evidence: row.evidence,
+    },
+  })));
+}
