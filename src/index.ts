@@ -206,13 +206,35 @@ app.get("/admin/reports/daily", async (context) => {
 });
 app.get("/admin/readiness", async (context) => {
   let databaseReady = false;
+  let grantStatus: string | undefined;
+  let txoddsStatus: string | undefined;
+  let txlineCapturedEvents = 0;
   try {
-    await context.env.DB.prepare("SELECT 1 AS ok").first();
+    const [grant, txodds, captured] = await Promise.all([
+      context.env.DB.prepare(
+        "SELECT status FROM opportunities WHERE official_url = ? LIMIT 1",
+      ).bind("https://superteam.fun/earn/grants/agentic-engineering").first<{ status: string }>(),
+      context.env.DB.prepare(
+        "SELECT status FROM opportunities WHERE official_url IN (?, ?) LIMIT 1",
+      ).bind(
+        "https://superteam.fun/earn/listing/consumer-and-fan-experiences",
+        "https://superteam.fun/earn/listing/consumer-and-fan-experiences/",
+      ).first<{ status: string }>(),
+      context.env.DB.prepare("SELECT COUNT(*) AS count FROM txline_events").first<{ count: number }>(),
+    ]);
     databaseReady = true;
+    grantStatus = grant?.status;
+    txoddsStatus = txodds?.status;
+    txlineCapturedEvents = captured?.count ?? 0;
   } catch {
     databaseReady = false;
   }
-  return context.json(buildReadiness(context.env, databaseReady));
+  return context.json(buildReadiness(context.env, {
+    databaseReady,
+    grantStatus,
+    txoddsStatus,
+    txlineCapturedEvents,
+  }));
 });
 app.post("/admin/discovery/run", async (context) => context.json(await runDiscovery(context.env)));
 app.post("/admin/reports/generate", async (context) => context.json(await generateDailyReport(context.env.DB)));

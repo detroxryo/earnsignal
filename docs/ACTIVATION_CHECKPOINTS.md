@@ -14,6 +14,8 @@ The remaining wallet-bound work can be completed in one session. Do not paste a 
 6. Verify an official TxLINE fixture request before enabling live capture.
 7. Review the readiness endpoint. Only then enable `PAYMENTS_ENABLED` or `TXLINE_LIVE_ENABLED` and deploy.
 
+After publication, set `GRANT_RESPONSE_DRIVE_URL` and `TXODDS_DEMO_URL` as non-secret Worker variables. Submission readiness also checks the D1 opportunity state and requires at least one captured TxLINE event, so completed checkpoints stop appearing as pending work.
+
 ## Secret entry
 
 Run each command interactively. Wrangler prompts for the value and does not require it in shell history.
