@@ -19,6 +19,13 @@ export interface ReadinessTrack {
   checks: ReadinessCheck[];
 }
 
+export interface ReadinessEvidence {
+  databaseReady: boolean;
+  grantStatus?: string;
+  txoddsStatus?: string;
+  txlineCapturedEvents: number;
+}
+
 const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 
@@ -35,7 +42,11 @@ function trackState(enabled: boolean, checks: ReadinessCheck[]): ReadinessState 
   return prerequisitesReady ? "READY_TO_ENABLE" : "HUMAN_ACTION_REQUIRED";
 }
 
-export function buildReadiness(env: AppBindings, databaseReady: boolean): {
+function submitted(status: string | undefined): boolean {
+  return status === "SUBMITTED" || status === "WON" || status === "PAID";
+}
+
+export function buildReadiness(env: AppBindings, evidence: ReadinessEvidence): {
   generatedAt: string;
   environment: string;
   secretsExposed: false;
@@ -56,7 +67,7 @@ export function buildReadiness(env: AppBindings, databaseReady: boolean): {
   const coreChecks: ReadinessCheck[] = [
     {
       id: "database",
-      ready: databaseReady,
+      ready: evidence.databaseReady,
       owner: "SYSTEM",
       action: "Restore the D1 binding or apply pending migrations.",
     },
@@ -144,16 +155,37 @@ export function buildReadiness(env: AppBindings, databaseReady: boolean): {
       action: "Use the production deployment for reviewer verification.",
     },
     {
-      id: "grant_portal_submission",
-      ready: false,
+      id: "grant_drive_link",
+      ready: present(env.GRANT_RESPONSE_DRIVE_URL),
       owner: "HUMAN",
-      action: "Finish Superteam login/KYC review and approve the final grant submission in the official portal.",
+      action: "Upload the finished Grant response PDF to Google Drive and create a public read-only link.",
+    },
+    {
+      id: "grant_portal_submission",
+      ready: submitted(evidence.grantStatus),
+      owner: "HUMAN",
+      action: "Finish Superteam login/KYC review and approve the final Grant submission in the official portal.",
     },
     {
       id: "txodds_live_evidence",
-      ready: txlineEnabled && present(env.TXLINE_GUEST_JWT) && present(env.TXLINE_API_TOKEN),
+      ready: txlineEnabled
+        && present(env.TXLINE_GUEST_JWT)
+        && present(env.TXLINE_API_TOKEN)
+        && evidence.txlineCapturedEvents > 0,
       owner: "HUMAN",
-      action: "Activate TxLINE, capture a verified fixture, and record a demo under five minutes.",
+      action: "Activate TxLINE and capture at least one verified fixture with replay events.",
+    },
+    {
+      id: "txodds_demo_video",
+      ready: present(env.TXODDS_DEMO_URL),
+      owner: "HUMAN",
+      action: "Record and publish the required TxODDS demo video under five minutes.",
+    },
+    {
+      id: "txodds_portal_submission",
+      ready: submitted(evidence.txoddsStatus),
+      owner: "HUMAN",
+      action: "Approve the final TxODDS submission in the official Superteam portal.",
     },
   ];
 

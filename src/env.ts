@@ -14,4 +14,6 @@ export type AppBindings = Omit<
   CONTROLLED_PAYER_ADDRESSES?: string;
   TXLINE_GUEST_JWT?: string;
   TXLINE_API_TOKEN?: string;
+  GRANT_RESPONSE_DRIVE_URL?: string;
+  TXODDS_DEMO_URL?: string;
 };

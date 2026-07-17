@@ -23,7 +23,7 @@ function env(overrides: Partial<AppBindings> = {}): AppBindings {
 
 describe("activation readiness", () => {
   it("lists human blockers without exposing configured values", () => {
-    const result = buildReadiness(env(), true);
+    const result = buildReadiness(env(), { databaseReady: true, txlineCapturedEvents: 0 });
     const serialized = JSON.stringify(result);
     expect(result.core.state).toBe("ACTIVE");
     expect(result.x402.state).toBe("HUMAN_ACTION_REQUIRED");
@@ -42,7 +42,7 @@ describe("activation readiness", () => {
       TXLINE_GUEST_JWT: "guest-jwt-secret",
       TXLINE_API_TOKEN: "txline-token-secret",
     });
-    const ready = buildReadiness(configured, true);
+    const ready = buildReadiness(configured, { databaseReady: true, txlineCapturedEvents: 0 });
     expect(ready.x402.state).toBe("READY_TO_ENABLE");
     expect(ready.txline.state).toBe("READY_TO_ENABLE");
 
@@ -50,14 +50,34 @@ describe("activation readiness", () => {
       ...configured,
       PAYMENTS_ENABLED: "true",
       TXLINE_LIVE_ENABLED: "true",
-    }, true);
+    }, { databaseReady: true, txlineCapturedEvents: 1 });
     expect(active.x402.state).toBe("ACTIVE");
     expect(active.txline.state).toBe("ACTIVE");
   });
 
   it("surfaces dangerous enablement with missing prerequisites", () => {
-    const result = buildReadiness(env({ PAYMENTS_ENABLED: "true" }), true);
+    const result = buildReadiness(
+      env({ PAYMENTS_ENABLED: "true" }),
+      { databaseReady: true, txlineCapturedEvents: 0 },
+    );
     expect(result.x402.state).toBe("MISCONFIGURED");
     expect(result.x402.ready).toBe(false);
+  });
+
+  it("uses persisted evidence for the human submission gates", () => {
+    const result = buildReadiness(env({
+      TXLINE_GUEST_JWT: "guest-jwt-secret",
+      TXLINE_API_TOKEN: "txline-token-secret",
+      TXLINE_LIVE_ENABLED: "true",
+      GRANT_RESPONSE_DRIVE_URL: "https://drive.google.com/example",
+      TXODDS_DEMO_URL: "https://youtube.com/example",
+    }), {
+      databaseReady: true,
+      grantStatus: "SUBMITTED",
+      txoddsStatus: "SUBMITTED",
+      txlineCapturedEvents: 5,
+    });
+    expect(result.submissions.state).toBe("ACTIVE");
+    expect(result.submissions.ready).toBe(true);
   });
 });
