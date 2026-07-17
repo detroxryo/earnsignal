@@ -17,6 +17,7 @@
     "db:migrate:staging": "wrangler d1 migrations apply DB --remote --env staging",
     "db:migrate:production": "wrangler d1 migrations apply DB --remote --env production",
     "check": "pnpm types:check && pnpm typecheck && pnpm test && pnpm deploy:dry",
+    "grant:pdf": "bash scripts/render-grant-pdf.sh",
     "secrets:scan": "node scripts/scan-secrets.mjs"
   },
   "dependencies": {
