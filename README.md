@@ -128,6 +128,7 @@ Self-tests, internal transfers, testnet assets, excluded transactions, and pendi
 - [MatchPulse submission draft](./docs/TXODDS_SUBMISSION.md)
 - [Ethical outreach templates](./docs/OUTREACH.md)
 - [2026-07-17 opportunity, execution, revenue, and improvement report](./docs/REPORT_2026-07-17.md)
+- [MatchPulse production dogfood QA](./docs/qa/MATCHPULSE_2026-07-17.md)
 
 ## License
 

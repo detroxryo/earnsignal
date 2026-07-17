@@ -6,7 +6,7 @@ node_modules/
 !.env.example
 coverage/
 dist/
+dogfood-output/
 worker-configuration.d.ts
 *.log
 .DS_Store
-
