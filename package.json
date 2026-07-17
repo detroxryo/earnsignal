@@ -1,0 +1,40 @@
+{
+  "name": "earnsignal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --env staging",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
+    "deploy:dry": "wrangler deploy --dry-run --outdir dist --env staging",
+    "types": "wrangler types --env-interface CloudflareBindings",
+    "types:check": "wrangler types --check --env-interface CloudflareBindings",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local --env staging",
+    "db:migrate:staging": "wrangler d1 migrations apply DB --remote --env staging",
+    "db:migrate:production": "wrangler d1 migrations apply DB --remote --env production",
+    "check": "pnpm types:check && pnpm typecheck && pnpm test && pnpm deploy:dry",
+    "secrets:scan": "node scripts/scan-secrets.mjs"
+  },
+  "dependencies": {
+    "@coinbase/cdp-sdk": "1.53.0",
+    "@hono/zod-validator": "0.9.0",
+    "@x402/core": "2.18.0",
+    "@x402/evm": "2.18.0",
+    "@x402/extensions": "2.18.0",
+    "@x402/hono": "2.18.0",
+    "@x402/svm": "2.18.0",
+    "hono": "4.12.30",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.17",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10",
+    "wrangler": "4.111.0"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

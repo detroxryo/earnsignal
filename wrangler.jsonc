@@ -1,0 +1,105 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "earnsignal",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "ai": {
+    "binding": "AI",
+    "remote": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "earnsignal",
+      "database_id": "ce683b34-fbcf-404c-a33f-10c91abba6ca",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 * * * *", "0 16 * * *"]
+  },
+  "vars": {
+    "APP_ENV": "development",
+    "APP_BASE_URL": "http://localhost:8787",
+    "AI_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8",
+    "AI_DAILY_CALL_LIMIT": "20",
+    "MAX_DIRECT_COST_USD": "2",
+    "PAYMENTS_ENABLED": "false",
+    "PAYMENT_NETWORK": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+    "FACILITATOR_URL": "https://x402.org/facilitator",
+    "TXLINE_API_BASE": "https://txline-dev.txodds.com",
+    "TXLINE_LIVE_ENABLED": "false",
+    "GITHUB_SEARCH_QUERIES": "is:issue is:open label:bounty,is:issue is:open label:reward"
+  },
+  "env": {
+    "staging": {
+      "name": "earnsignal-staging",
+      "ai": {
+        "binding": "AI",
+        "remote": true
+      },
+      "triggers": {
+        "crons": ["0 * * * *", "0 16 * * *"]
+      },
+      "vars": {
+        "APP_ENV": "staging",
+        "APP_BASE_URL": "https://earnsignal-staging.detroxryo.workers.dev",
+        "AI_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8",
+        "AI_DAILY_CALL_LIMIT": "20",
+        "MAX_DIRECT_COST_USD": "2",
+        "PAYMENTS_ENABLED": "false",
+        "PAYMENT_NETWORK": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+        "FACILITATOR_URL": "https://x402.org/facilitator",
+        "TXLINE_API_BASE": "https://txline-dev.txodds.com",
+        "TXLINE_LIVE_ENABLED": "false",
+        "GITHUB_SEARCH_QUERIES": "is:issue is:open label:bounty,is:issue is:open label:reward"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "earnsignal-staging",
+          "database_id": "0e536ae9-57c5-4a8b-8942-471af272f0e3",
+          "migrations_dir": "migrations"
+        }
+      ]
+    },
+    "production": {
+      "name": "earnsignal",
+      "ai": {
+        "binding": "AI",
+        "remote": true
+      },
+      "triggers": {
+        "crons": ["0 * * * *", "0 16 * * *"]
+      },
+      "vars": {
+        "APP_ENV": "production",
+        "APP_BASE_URL": "https://earnsignal.detroxryo.workers.dev",
+        "AI_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8",
+        "AI_DAILY_CALL_LIMIT": "20",
+        "MAX_DIRECT_COST_USD": "2",
+        "PAYMENTS_ENABLED": "false",
+        "PAYMENT_NETWORK": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        "FACILITATOR_URL": "https://api.cdp.coinbase.com/platform/v2/x402",
+        "TXLINE_API_BASE": "https://txline.txodds.com",
+        "TXLINE_LIVE_ENABLED": "false",
+        "GITHUB_SEARCH_QUERIES": "is:issue is:open label:bounty,is:issue is:open label:reward"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "earnsignal",
+          "database_id": "ce683b34-fbcf-404c-a33f-10c91abba6ca",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
+}
