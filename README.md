@@ -7,6 +7,8 @@ The system never signs transactions, sends funds, deploys contracts, approves to
 ## Live deployment
 
 - Production API: <https://earnsignal.detroxryo.workers.dev>
+- Human API guide: <https://earnsignal.detroxryo.workers.dev/docs>
+- Agent discovery: <https://earnsignal.detroxryo.workers.dev/llms.txt> and <https://earnsignal.detroxryo.workers.dev/openapi.json>
 - MatchPulse: <https://earnsignal.detroxryo.workers.dev/matchpulse>
 - Operator console: <https://earnsignal.detroxryo.workers.dev/admin> (Bearer-protected data)
 - Current public status: payments and TxLINE live capture remain disabled until their human wallet checkpoints are completed; discovery, scoring, Workers AI, and reports are live. Both Cron triggers are deployed, and the protected readiness endpoint independently monitors their successful delivery and report freshness.
@@ -39,6 +41,9 @@ The system never signs transactions, sends funds, deploys contracts, approves to
 | Method | Route | Access | Purpose |
 |---|---|---|---|
 | GET | `/health` | Public | Runtime, D1, payments, and TxLINE status |
+| GET | `/docs` | Public | Human-readable API guide and pilot request entry point |
+| GET | `/llms.txt` | Public | Agent-readable capabilities and payment safety |
+| GET | `/openapi.json` | Public | OpenAPI 3.1 schema for evaluation clients |
 | GET | `/v1/opportunities/top` | Public | Low-risk candidates scoring at least 70 |
 | POST | `/v1/evaluate/preview` | Public | Free score range and hard-risk preview |
 | POST | `/v1/evaluate` | x402, $0.10 USDC | Full evidence and EV evaluation |

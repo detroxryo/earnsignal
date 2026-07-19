@@ -38,6 +38,10 @@ export const evaluationInputSchema = z.object({
   evidence: z.array(z.string().trim().min(1).max(1_000)).max(20).default([]),
 });
 
+export const evaluationInputJsonSchema = z.toJSONSchema(evaluationInputSchema, {
+  target: "draft-2020-12",
+});
+
 export type EvaluationInput = z.infer<typeof evaluationInputSchema>;
 
 export interface ScoreBreakdown {

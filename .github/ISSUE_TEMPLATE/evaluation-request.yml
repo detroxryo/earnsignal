@@ -1,0 +1,55 @@
+name: Opportunity evaluation pilot
+description: Request a no-funds pilot evaluation before EarnSignal x402 payments are activated.
+title: "[Evaluation] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        EarnSignal evaluates legitimate work opportunities only. Do not include private keys, recovery phrases, API keys, personal identity documents, or other secrets. Opening this request does not authorize any wallet transaction.
+  - type: input
+    id: official_url
+    attributes:
+      label: Official opportunity URL
+      description: Link to the issuer's own scope, issue, or listing.
+      placeholder: https://example.com/opportunity
+    validations:
+      required: true
+  - type: input
+    id: reward
+    attributes:
+      label: Reward and currency
+      placeholder: 100 USDC
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria and deadline
+      description: Paste a short summary and link to the official details instead of copying a long listing.
+    validations:
+      required: true
+  - type: textarea
+    id: payout_evidence
+    attributes:
+      label: Payout evidence
+      description: Link prior payouts, escrow, platform history, or issuer evidence. Write "unknown" if unverified.
+    validations:
+      required: true
+  - type: dropdown
+    id: capital
+    attributes:
+      label: Upfront capital required
+      options:
+        - None
+        - Less than 2 USD
+        - More than 2 USD
+        - Unknown
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: This request does not involve gambling, leveraged trading, deposits, token purchases, illegal work, or automatic wallet signing.
+          required: true

@@ -11,7 +11,8 @@ import { evaluationInputSchema } from "./domain";
 import type { AppBindings } from "./env";
 import { assertTransition, cronExecutionKey, executionStates, type ExecutionState } from "./execution";
 import { MATCHPULSE_HTML } from "./matchpulse-page";
-import { capturePaymentSettlement, requireX402 } from "./payments";
+import { capturePaymentSettlement, paymentActivation, requireX402 } from "./payments";
+import { buildOpenApi, LLMS_TEXT, PUBLIC_DOCS_HTML } from "./public-docs";
 import { buildReadiness } from "./readiness";
 import type { CronRunStatus } from "./readiness";
 import { generateDailyReport, getLatestDailyReport } from "./reports";
@@ -56,8 +57,15 @@ app.get("/", (context) => context.json({
     opportunities: "/v1/opportunities/top",
     preview: "/v1/evaluate/preview",
     matchPulse: "/matchpulse",
+    docs: "/docs",
+    openApi: "/openapi.json",
+    llms: "/llms.txt",
   },
 }));
+
+app.get("/docs", (context) => context.html(PUBLIC_DOCS_HTML));
+app.get("/llms.txt", (context) => context.text(LLMS_TEXT));
+app.get("/openapi.json", (context) => context.json(buildOpenApi(context.env.APP_BASE_URL)));
 
 app.get("/health", async (context) => {
   let database = false;
@@ -75,13 +83,16 @@ app.get("/health", async (context) => {
   } catch {
     database = false;
   }
+  const payments = paymentActivation(context.env);
   return context.json({
     ok: database,
     service: "earnsignal",
     version: VERSION,
     environment: context.env.APP_ENV,
     database,
-    paymentsEnabled: context.env.PAYMENTS_ENABLED === "true",
+    paymentsEnabled: payments.enabled,
+    paymentsConfigured: payments.configured,
+    paymentsActive: payments.active,
     txlineLiveEnabled: isTxlineConfigured(context.env),
     latestReport,
     latestDiscovery,
@@ -109,6 +120,7 @@ app.post(
       decision: result.decision,
       hardRisks: result.hardRisks,
       expectedNetUsd: result.expectedNetUsd,
+      verificationBoundary: "The preview scores caller-supplied structured facts. It does not fetch the official URL or infer omitted risks; provide every known hard risk explicitly.",
       note: "Free preview omits detailed evidence analysis and execution guidance.",
     });
   },
@@ -143,6 +155,7 @@ async function paidEvaluation(
     expectedNetPerHourUsd: result.expectedNetPerHourUsd,
     scoreBreakdown: result.scoreBreakdown,
     evidence: input.evidence,
+    verificationBoundary: "The evaluation scores caller-supplied structured facts and evidence. It does not independently fetch the official URL or infer omitted risks.",
     rationale: { en: rationale.en, zh: rationale.zh, usedAi: rationale.usedAi },
     nextAction: result.decision === "EXECUTE"
       ? "Verify current official scope, then begin an artifact-first implementation."
