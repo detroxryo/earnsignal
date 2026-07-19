@@ -4,6 +4,7 @@ export type ReadinessState =
   | "ACTIVE"
   | "READY_TO_ENABLE"
   | "HUMAN_ACTION_REQUIRED"
+  | "DEGRADED"
   | "MISCONFIGURED";
 
 export interface ReadinessCheck {
@@ -11,7 +12,15 @@ export interface ReadinessCheck {
   ready: boolean;
   owner: "SYSTEM" | "OPERATOR" | "HUMAN";
   action: string;
+  observedAt?: string;
+  maxAgeMinutes?: number;
+  latestAttemptAt?: string;
+  latestAttemptStartedAt?: string;
+  latestAttemptFinishedAt?: string;
+  latestAttemptStatus?: CronRunStatus;
 }
+
+export type CronRunStatus = "RUNNING" | "SUCCEEDED" | "FAILED";
 
 export interface ReadinessTrack {
   state: ReadinessState;
@@ -24,10 +33,27 @@ export interface ReadinessEvidence {
   grantStatus?: string;
   txoddsStatus?: string;
   txlineCapturedEvents: number;
+  latestHourlyCronSucceededAt?: string;
+  latestHourlyCronAttemptAt?: string;
+  latestHourlyCronAttemptStartedAt?: string;
+  latestHourlyCronAttemptFinishedAt?: string;
+  latestHourlyCronAttemptStatus?: CronRunStatus;
+  latestDailyCronSucceededAt?: string;
+  latestDailyCronAttemptAt?: string;
+  latestDailyCronAttemptStartedAt?: string;
+  latestDailyCronAttemptFinishedAt?: string;
+  latestDailyCronAttemptStatus?: CronRunStatus;
+  latestReportSnapshotCreatedAt?: string;
+  now?: Date;
 }
 
 const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+const MINUTE_MS = 60_000;
+const MAX_FUTURE_SKEW_MS = 5 * MINUTE_MS;
+const HOURLY_CRON_MAX_AGE_MINUTES = 120;
+const DAILY_AUTOMATION_MAX_AGE_MINUTES = 26 * 60;
+const CRON_RUNNING_MAX_AGE_MINUTES = 15;
 
 function present(value: string | undefined): boolean {
   return Boolean(value?.trim());
@@ -46,16 +72,91 @@ function submitted(status: string | undefined): boolean {
   return status === "SUBMITTED" || status === "WON" || status === "PAID";
 }
 
+function isFresh(
+  observedAt: string | undefined,
+  now: Date,
+  maxAgeMinutes: number,
+): boolean {
+  if (!observedAt) return false;
+  const observedTime = Date.parse(observedAt);
+  if (!Number.isFinite(observedTime)) return false;
+  const ageMs = now.getTime() - observedTime;
+  return ageMs >= -MAX_FUTURE_SKEW_MS && ageMs <= maxAgeMinutes * MINUTE_MS;
+}
+
+function cronAutomationCheck(
+  id: string,
+  observedAt: string | undefined,
+  latestAttemptAt: string | undefined,
+  latestAttemptStartedAt: string | undefined,
+  latestAttemptFinishedAt: string | undefined,
+  latestAttemptStatus: CronRunStatus | undefined,
+  now: Date,
+  maxAgeMinutes: number,
+  action: string,
+): ReadinessCheck {
+  const latestAttemptTime = latestAttemptAt ? Date.parse(latestAttemptAt) : Number.NaN;
+  const latestAttemptStartedTime = latestAttemptStartedAt
+    ? Date.parse(latestAttemptStartedAt)
+    : latestAttemptTime;
+  const latestAttemptAgeMs = now.getTime() - latestAttemptStartedTime;
+  const latestAttemptValid = Number.isFinite(latestAttemptTime)
+    && Number.isFinite(latestAttemptStartedTime)
+    && now.getTime() - latestAttemptTime >= -MAX_FUTURE_SKEW_MS
+    && latestAttemptAgeMs >= -MAX_FUTURE_SKEW_MS;
+  const latestAttemptHealthy = latestAttemptValid
+    && (latestAttemptStatus === "SUCCEEDED"
+      || (latestAttemptStatus === "RUNNING"
+        && latestAttemptAgeMs <= CRON_RUNNING_MAX_AGE_MINUTES * MINUTE_MS));
+  const resolvedAction = latestAttemptStatus === "FAILED"
+    ? "Inspect the latest failed Cron Event and its structured Worker logs before retrying."
+    : latestAttemptStatus === "RUNNING" && !latestAttemptHealthy
+      ? "Inspect the long-running Cron Event and diagnose the task before retrying."
+      : action;
+  return {
+    id,
+    ready: isFresh(observedAt, now, maxAgeMinutes) && latestAttemptHealthy,
+    owner: "OPERATOR",
+    action: resolvedAction,
+    observedAt,
+    maxAgeMinutes,
+    latestAttemptAt,
+    latestAttemptStartedAt,
+    latestAttemptFinishedAt,
+    latestAttemptStatus,
+  };
+}
+
+function freshnessCheck(
+  id: string,
+  observedAt: string | undefined,
+  now: Date,
+  maxAgeMinutes: number,
+  action: string,
+): ReadinessCheck {
+  return {
+    id,
+    ready: isFresh(observedAt, now, maxAgeMinutes),
+    owner: "OPERATOR",
+    action,
+    observedAt,
+    maxAgeMinutes,
+  };
+}
+
 export function buildReadiness(env: AppBindings, evidence: ReadinessEvidence): {
   generatedAt: string;
   environment: string;
   secretsExposed: false;
   core: ReadinessTrack;
+  automation: ReadinessTrack;
   x402: ReadinessTrack;
   txline: ReadinessTrack;
   submissions: ReadinessTrack;
   nextHumanActions: string[];
+  nextOperatorActions: string[];
 } {
+  const now = evidence.now ?? new Date();
   const production = env.APP_ENV === "production";
   const receiverValid = SOLANA_ADDRESS.test(env.X402_RECEIVER_ADDRESS?.trim() ?? "");
   const cdpRequired = env.FACILITATOR_URL.includes("api.cdp.coinbase.com");
@@ -83,6 +184,38 @@ export function buildReadiness(env: AppBindings, evidence: ReadinessEvidence): {
       owner: "OPERATOR",
       action: "Store the registered Superteam Agent API key as a Worker secret.",
     },
+  ];
+
+  const automationChecks: ReadinessCheck[] = [
+    cronAutomationCheck(
+      "hourly_discovery_cron",
+      evidence.latestHourlyCronSucceededAt,
+      evidence.latestHourlyCronAttemptAt,
+      evidence.latestHourlyCronAttemptStartedAt,
+      evidence.latestHourlyCronAttemptFinishedAt,
+      evidence.latestHourlyCronAttemptStatus,
+      now,
+      HOURLY_CRON_MAX_AGE_MINUTES,
+      "Redeploy the configured Cron Triggers and inspect recent hourly Cron Events.",
+    ),
+    cronAutomationCheck(
+      "daily_report_cron",
+      evidence.latestDailyCronSucceededAt,
+      evidence.latestDailyCronAttemptAt,
+      evidence.latestDailyCronAttemptStartedAt,
+      evidence.latestDailyCronAttemptFinishedAt,
+      evidence.latestDailyCronAttemptStatus,
+      now,
+      DAILY_AUTOMATION_MAX_AGE_MINUTES,
+      "Inspect the 0 16 * * * Cron Event and redeploy the configured triggers if no successful run appears.",
+    ),
+    freshnessCheck(
+      "daily_report_snapshot",
+      evidence.latestReportSnapshotCreatedAt,
+      now,
+      DAILY_AUTOMATION_MAX_AGE_MINUTES,
+      "Generate the missing daily report after the Cron delivery issue is diagnosed.",
+    ),
   ];
 
   const x402Checks: ReadinessCheck[] = [
@@ -190,6 +323,7 @@ export function buildReadiness(env: AppBindings, evidence: ReadinessEvidence): {
   ];
 
   const coreReady = coreChecks.every((check) => check.ready);
+  const automationReady = automationChecks.every((check) => check.ready);
   const x402State = trackState(paymentsEnabled, x402Checks);
   const txlineState = trackState(txlineEnabled, txlineChecks);
   const submissionsReady = submissionChecks.every((check) => check.ready);
@@ -197,15 +331,30 @@ export function buildReadiness(env: AppBindings, evidence: ReadinessEvidence): {
     .filter((check) => check.owner === "HUMAN" && !check.ready)
     .map((check) => check.action)
     .filter((action, index, actions) => actions.indexOf(action) === index);
+  const nextOperatorActions = [
+    ...coreChecks,
+    ...automationChecks,
+    ...x402Checks,
+    ...txlineChecks,
+    ...submissionChecks,
+  ]
+    .filter((check) => check.owner === "OPERATOR" && !check.ready)
+    .map((check) => check.action)
+    .filter((action, index, actions) => actions.indexOf(action) === index);
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: now.toISOString(),
     environment: env.APP_ENV,
     secretsExposed: false,
     core: {
       state: coreReady ? "ACTIVE" : "MISCONFIGURED",
       ready: coreReady,
       checks: coreChecks,
+    },
+    automation: {
+      state: automationReady ? "ACTIVE" : "DEGRADED",
+      ready: automationReady,
+      checks: automationChecks,
     },
     x402: {
       state: x402State,
@@ -223,5 +372,6 @@ export function buildReadiness(env: AppBindings, evidence: ReadinessEvidence): {
       checks: submissionChecks,
     },
     nextHumanActions,
+    nextOperatorActions,
   };
 }

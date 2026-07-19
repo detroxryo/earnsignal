@@ -1,6 +1,6 @@
 # Activation checkpoints
 
-EarnSignal exposes `GET /admin/readiness` so the operator can see which prerequisite is missing without reading or returning any secret value. A check reports only a boolean, an owner, and the next safe action.
+EarnSignal exposes `GET /admin/readiness` so the operator can see which prerequisite is missing without reading or returning any secret value. A check reports only a boolean, an owner, the observed non-secret timestamp/status when relevant, and the next safe action. The independent `automation` track marks hourly discovery evidence stale after two hours and daily Cron/report evidence stale after 26 hours. It also degrades immediately on a latest failed attempt or after a run remains `RUNNING` for over 15 minutes, so a previous success or manual report backfill cannot conceal a current delivery failure.
 
 ## One-pass human handoff
 
