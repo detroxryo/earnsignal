@@ -3,13 +3,51 @@ import { Hono } from "hono";
 import type { FacilitatorClient } from "@x402/core/server";
 import type { PaymentRequired } from "@x402/core/types";
 import type { AppBindings } from "../src/env";
-import { buildX402Middleware, isExternalPayer, parseSettlementHeader } from "../src/payments";
+import { buildX402Middleware, isExternalPayer, parseSettlementHeader, paymentActivation } from "../src/payments";
 
 function encoded(value: unknown): string {
   return btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 describe("x402 settlement ledger guards", () => {
+  it("reports active only when every production payment prerequisite is configured", () => {
+    const ready = {
+      APP_ENV: "production",
+      PAYMENTS_ENABLED: "true",
+      PAYMENT_NETWORK: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      FACILITATOR_URL: "https://api.cdp.coinbase.com/platform/v2/x402",
+      X402_RECEIVER_ADDRESS: "11111111111111111111111111111111",
+      CDP_API_KEY_ID: "configured",
+      CDP_API_KEY_SECRET: "configured",
+      CONTROLLED_PAYER_ADDRESSES: "Vote111111111111111111111111111111111111111",
+    } as unknown as AppBindings;
+    expect(paymentActivation(ready)).toEqual({ enabled: true, configured: true, active: true });
+    expect(paymentActivation({ ...ready, CDP_API_KEY_SECRET: undefined })).toEqual({
+      enabled: true,
+      configured: false,
+      active: false,
+    });
+    expect(paymentActivation({ ...ready, PAYMENTS_ENABLED: "false" })).toEqual({
+      enabled: false,
+      configured: true,
+      active: false,
+    });
+    for (const controlled of ["", ",", "not-a-solana-address", ready.X402_RECEIVER_ADDRESS]) {
+      expect(paymentActivation({ ...ready, CONTROLLED_PAYER_ADDRESSES: controlled }).active).toBe(false);
+    }
+    expect(paymentActivation({
+      ...ready,
+      CONTROLLED_PAYER_ADDRESSES: "Z".repeat(32),
+    }).active).toBe(false);
+    expect(paymentActivation({
+      ...ready,
+      X402_RECEIVER_ADDRESS: "Z".repeat(32),
+    }).active).toBe(false);
+    for (const facilitator of ["not a url", "http://api.cdp.coinbase.com/platform/v2/x402", "https://api.cdp.coinbase.com.evil.example/x402"]) {
+      expect(paymentActivation({ ...ready, FACILITATOR_URL: facilitator } as unknown as AppBindings).active).toBe(false);
+    }
+  });
+
   it("accepts only successful, chain-confirmed settlement shapes", () => {
     const parsed = parseSettlementHeader(encoded({
       success: true,

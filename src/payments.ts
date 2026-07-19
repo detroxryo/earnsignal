@@ -1,4 +1,5 @@
 import { createCdpFacilitatorClient } from "@coinbase/cdp-sdk/x402";
+import { isAddress } from "@solana/addresses";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import type { FacilitatorClient } from "@x402/core/server";
 import type { Network, SettleResponse } from "@x402/core/types";
@@ -13,6 +14,42 @@ export const EVALUATION_PRICES = {
   "/v1/evaluate": { usd: 0.1, atomic: "100000" },
   "/v1/evaluate/full": { usd: 5, atomic: "5000000" },
 } as const;
+
+const SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+const SOLANA_NETWORK = /^solana:[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+export function paymentActivation(env: AppBindings): {
+  enabled: boolean;
+  configured: boolean;
+  active: boolean;
+} {
+  const enabled = env.PAYMENTS_ENABLED === "true";
+  const receiver = env.X402_RECEIVER_ADDRESS?.trim() ?? "";
+  const receiverReady = isAddress(receiver);
+  const facilitatorUrl = env.FACILITATOR_URL?.trim() ?? "";
+  let facilitator: URL | null = null;
+  try {
+    facilitator = new URL(facilitatorUrl);
+  } catch {
+    facilitator = null;
+  }
+  const cdpFacilitator = facilitator?.hostname === "api.cdp.coinbase.com";
+  const facilitatorReady = facilitator?.protocol === "https:"
+    && (env.APP_ENV !== "production" || cdpFacilitator)
+    && (!cdpFacilitator || Boolean(env.CDP_API_KEY_ID?.trim() && env.CDP_API_KEY_SECRET?.trim()));
+  const paymentNetwork = env.PAYMENT_NETWORK?.trim() ?? "";
+  const networkReady = SOLANA_NETWORK.test(paymentNetwork)
+    && (env.APP_ENV !== "production" || env.PAYMENT_NETWORK === SOLANA_MAINNET);
+  const controlledPayers = (env.CONTROLLED_PAYER_ADDRESSES ?? "")
+    .split(",")
+    .map((address) => address.trim())
+    .filter(Boolean);
+  const controlledPayersReady = controlledPayers.length > 0
+    && controlledPayers.every((address) => isAddress(address))
+    && controlledPayers.some((address) => address !== receiver);
+  const configured = receiverReady && facilitatorReady && networkReady && controlledPayersReady;
+  return { enabled, configured, active: enabled && configured };
+}
 
 interface ParsedSettlement {
   success: boolean;
@@ -231,14 +268,16 @@ export function requireX402(
   path: keyof typeof EVALUATION_PRICES,
 ): MiddlewareHandler<{ Bindings: AppBindings }> {
   return async (context, next) => {
-    if (context.env.PAYMENTS_ENABLED !== "true") {
+    const activation = paymentActivation(context.env);
+    if (!activation.enabled) {
       return context.json({
         error: "payments_not_enabled",
         message: "This paid endpoint is staged but cannot accept funds until the receiver and facilitator are configured.",
       }, 503);
     }
-    const receiver = context.env.X402_RECEIVER_ADDRESS;
-    if (!receiver) return context.json({ error: "payment_receiver_not_configured" }, 503);
+    if (!activation.configured) {
+      return context.json({ error: "payment_prerequisites_not_configured" }, 503);
+    }
     try {
       const middleware = buildX402Middleware(path, context.env);
       return await middleware(context, next);
