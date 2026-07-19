@@ -55,6 +55,27 @@ describe("source adapter resilience", () => {
     expect(opportunity?.input.hardRisks).toContain("PAYOUT_UNVERIFIABLE");
   });
 
+  it("keeps generic GitHub discovery fail-closed even with a public transaction link", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({
+      items: [{
+        id: 51,
+        state: "open",
+        html_url: "https://github.com/example/repo/issues/51",
+        title: "[Bounty $100] Public payout example",
+        body: "Previous payout: https://explorer.solana.com/tx/example",
+        created_at: "2026-07-17T00:00:00Z",
+        updated_at: "2026-07-19T00:00:00Z",
+        labels: ["bounty"],
+        repository_url: "https://api.github.com/repos/example/repo",
+      }],
+    })));
+    const [opportunity] = await discoverGitHub(env);
+    expect(opportunity?.input.hardRisks).toEqual(["PAYOUT_UNVERIFIABLE"]);
+    expect(opportunity?.input.evidence).toContain(
+      "Generic GitHub discovery is fail-closed: platform funding and operator-region eligibility are not execution-verified.",
+    );
+  });
+
   it("samples only two bounded comment pages for high-value candidates", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input));
@@ -182,6 +203,66 @@ describe("source adapter resilience", () => {
     expect(opportunity?.input.evidence).toContain(
       "Authority sample found 1 owner/member/collaborator or supported platform-bot comments (0 platform-bot).",
     );
+  });
+
+  it("hard-rejects an Algora bounty when the configured operator country is unsupported", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/search/issues") {
+        return Response.json({
+          items: [{
+            id: 49,
+            state: "open",
+            html_url: "https://github.com/example/repo/issues/10",
+            comments_url: "https://api.github.com/repos/example/repo/issues/10/comments",
+            comments: 1,
+            title: "[Bounty $100] Algora task",
+            body: null,
+            created_at: "2026-07-17T00:00:00Z",
+            updated_at: "2026-07-17T00:00:00Z",
+            labels: ["bounty"],
+            repository_url: "https://api.github.com/repos/example/repo",
+          }],
+        });
+      }
+      return Response.json([{
+        id: 1,
+        author_association: "NONE",
+        user: { login: "algora-pbc[bot]", type: "Bot" },
+      }]);
+    }));
+    const [opportunity] = await discoverGitHub({
+      ...env,
+      OPERATOR_COUNTRY: "CN",
+    });
+    expect(opportunity?.input.hardRisks).toContain("REGION_INELIGIBLE");
+    expect(opportunity?.input.evidence).toEqual(expect.arrayContaining([
+      "Supported platform bots observed: algora-pbc[bot].",
+      expect.stringContaining("Algora payouts do not support configured operator country CN"),
+    ]));
+  });
+
+  it("hard-rejects a stale cached listing when the official GitHub issue is closed", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({
+      items: [{
+        id: 50,
+        state: "closed",
+        html_url: "https://github.com/example/repo/issues/11",
+        title: "[Bounty $100] Closed task",
+        body: "Previous payout: https://explorer.solana.com/tx/example",
+        created_at: "2026-07-17T00:00:00Z",
+        updated_at: "2026-07-19T00:00:00Z",
+        labels: ["bounty"],
+        repository_url: "https://api.github.com/repos/example/repo",
+      }],
+    })));
+    const [opportunity] = await discoverGitHub(env);
+    expect(opportunity?.input.hardRisks).toEqual(["PAYOUT_UNVERIFIABLE", "DEADLINE_INFEASIBLE"]);
+    expect(opportunity?.input.evidence).toEqual(expect.arrayContaining([
+      "GitHub issue state: closed.",
+      "Official GitHub issue is not open; any cached bounty listing is stale and must not be executed.",
+      "Generic GitHub discovery is fail-closed: platform funding and operator-region eligibility are not execution-verified.",
+    ]));
   });
 
   it("does not penalize authority when only one edge page was available", async () => {

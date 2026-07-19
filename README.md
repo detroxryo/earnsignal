@@ -25,6 +25,7 @@ The system never signs transactions, sends funds, deploys contracts, approves to
 
 - Hourly opportunity discovery from the authenticated Superteam Agent API, GitHub Search, and CDP Bazaar, plus a curated official-opportunity registry.
 - Deterministic 0–100 scoring with the mission's fixed weights and hard rejection rules.
+- Generic GitHub reward discovery is fail-closed until a dedicated platform adapter verifies funding, payout terms, and operator-region eligibility. Bounded platform-bot enrichment can add a more specific region rejection; production is configured for `CN`.
 - D1 persistence for opportunities, evaluations, executions, ledger entries, reports, Cron idempotency, AI budgets, and captured TxLINE events.
 - Daily opportunity, execution, revenue, and improvement reports at 00:00 Asia/Shanghai (`0 16 * * *` UTC).
 - Secret-safe automation freshness checks for hourly discovery, daily Cron delivery, and the persisted daily report snapshot; missing or stale evidence produces a `DEGRADED` track instead of being hidden by a manual backfill.
