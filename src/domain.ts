@@ -4,6 +4,7 @@ export const hardRiskFlags = [
   "GAMBLING_OR_WAGERING",
   "DEPOSIT_OR_PURCHASE_REQUIRED",
   "REGION_INELIGIBLE",
+  "ELIGIBILITY_UNVERIFIED",
   "PAYOUT_UNVERIFIABLE",
   "CAPITAL_LIMIT_EXCEEDED",
   "AUTOMATIC_SIGNING_REQUIRED",
@@ -73,4 +74,3 @@ export interface NormalizedOpportunity {
   input: EvaluationInput;
   raw: unknown;
 }
-
