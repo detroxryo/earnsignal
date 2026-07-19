@@ -18,18 +18,19 @@ The system never signs transactions, sends funds, deploys contracts, approves to
 1. Open [health](https://earnsignal.detroxryo.workers.dev/health) to verify production, D1, and activation flags.
 2. Open the [ranked opportunity feed](https://earnsignal.detroxryo.workers.dev/v1/opportunities/top) to inspect deterministic low-risk candidates.
 3. Open [MatchPulse](https://earnsignal.detroxryo.workers.dev/matchpulse) to review the no-betting and accessibility boundary.
-4. Read the [daily evidence report](./docs/REPORT_2026-07-17.md) and inspect the test suite for payment, scoring, Cron, source, and page guards.
+4. Read the [daily evidence report](./docs/REPORT_2026-07-19.md) and inspect the test suite for payment, scoring, Cron, source, and page guards.
 5. Read the [official Grant prompt response](./docs/GRANT_RESPONSE.md) for the next 30-day Solana delivery plan.
 
 ![MatchPulse production interface](./docs/qa/assets/matchpulse-desktop-after.png)
 
 ## What is implemented
 
-- Hourly opportunity discovery from the authenticated Superteam Agent API, GitHub Search, CDP Bazaar, Execution Market H2A, and TaskBounty, plus a curated official-opportunity registry.
+- Hourly opportunity discovery from the authenticated Superteam Agent API, GitHub Search, CDP Bazaar, Execution Market H2A, TaskBounty, and Opire, plus a curated official-opportunity registry.
 - Deterministic 0–100 scoring with the mission's fixed weights and hard rejection rules.
 - Generic GitHub reward discovery is fail-closed until a dedicated platform adapter verifies funding, payout terms, and operator-region eligibility. Bounded platform-bot enrichment can add a more specific region rejection; production is configured for `CN`.
 - Execution Market escrow evidence is checked at most five times per discovery against its task payment timeline and Base mainnet transaction/receipt. The verifier requires the documented Facilitator, PaymentOperator, AuthCaptureEscrow, Base USDC, token collector, fee bounds, exact amount, successful receipt, authorization event, and transfer event. It deliberately retains `PAYOUT_UNVERIFIABLE`: the on-chain `PaymentInfo` contains a random salt but does not commit to the task UUID, so the platform-controlled timeline is not independent task binding.
 - TaskBounty candidates require authoritative detail state `OPEN` plus `FUNDED`; its list filter, list-level competition count, and arbitrary explorer URLs are never treated as payout proof.
+- Opire discovery reconciles its official list and issue detail with the authoritative GitHub issue, progressively checking at most 16 candidates and returning at most eight live rows. Historical platform KPIs never prove that a specific reward is reserved, so every row retains `PAYOUT_UNVERIFIABLE`; the configured mainland-China operator also receives `REGION_INELIGIBLE` because Opire documents Stripe Connect payouts and mainland China is absent from Stripe's Express connected-account availability list.
 - D1 persistence for opportunities, evaluations, executions, ledger entries, reports, Cron idempotency, AI budgets, and captured TxLINE events.
 - Daily opportunity, execution, revenue, and improvement reports at 00:00 Asia/Shanghai (`0 16 * * *` UTC).
 - Secret-safe automation freshness checks for hourly discovery, daily Cron delivery, and the persisted daily report snapshot; missing or stale evidence produces a `DEGRADED` track instead of being hidden by a manual backfill.

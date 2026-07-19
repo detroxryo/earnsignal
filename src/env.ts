@@ -8,6 +8,7 @@ export type AppBindings = Omit<
   ADMIN_TOKEN?: string;
   GITHUB_TOKEN?: string;
   SUPERTEAM_AGENT_API_KEY?: string;
+  OPIRE_API_BASE: string;
   X402_RECEIVER_ADDRESS?: string;
   CDP_API_KEY_ID?: string;
   CDP_API_KEY_SECRET?: string;
