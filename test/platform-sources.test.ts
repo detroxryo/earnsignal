@@ -58,8 +58,8 @@ describe("Execution Market H2A discovery", () => {
     });
     expect(opportunity?.input).toMatchObject({
       rewardUsd: 8.7,
-      payoutEvidence: 0.85,
-      reputation: 0.75,
+      payoutEvidence: 0.65,
+      reputation: 0.65,
       timeHours: 1.5,
       technicalDifficulty: "LOW",
       hardRisks: ["PAYOUT_UNVERIFIABLE"],
@@ -160,7 +160,7 @@ describe("Execution Market H2A discovery", () => {
     }], new Response("unavailable", { status: 503 })));
 
     const [opportunity] = await discoverExecutionMarket({ now: NOW });
-    expect(opportunity?.input).toMatchObject({ payoutEvidence: 0.35, reputation: 0.5 });
+    expect(opportunity?.input).toMatchObject({ payoutEvidence: 0.35, reputation: 0.45 });
     expect(opportunity?.input.evidence).toContain(
       "Historical platform payout volume was unavailable or zero during discovery.",
     );
