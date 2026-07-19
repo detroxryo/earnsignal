@@ -42,11 +42,11 @@ The application question asks the builder to enter `help me apply for the agenti
 
 - Source response: [`GRANT_RESPONSE.md`](./GRANT_RESPONSE.md)
 - Reviewer PDF: [`earnsignal-superteam-agentic-engineering-grant.pdf`](../output/pdf/earnsignal-superteam-agentic-engineering-grant.pdf)
-- Drive link: `PENDING_HUMAN_GOOGLE_LOGIN_AND_PUBLIC_SHARE`
+- Drive link: `https://drive.google.com/file/d/1iyM3luqOC1NTXt4ao1sdT-FPnB8hOa5d/view?usp=sharing`
 
 ## Public links
 
 - Live API: `https://earnsignal.detroxryo.workers.dev`
 - Repository: `https://github.com/detroxryo/earnsignal`
 - MatchPulse demo: `https://earnsignal.detroxryo.workers.dev/matchpulse`
-- Prompt-response Drive link: `PENDING_HUMAN_GOOGLE_LOGIN_AND_PUBLIC_SHARE`
+- Prompt-response Drive link: `https://drive.google.com/file/d/1iyM3luqOC1NTXt4ao1sdT-FPnB8hOa5d/view?usp=sharing`

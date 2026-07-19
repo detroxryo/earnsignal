@@ -1,6 +1,6 @@
 export type AppBindings = Omit<
   CloudflareBindings,
-  "AI" | "PAYMENTS_ENABLED" | "TXLINE_LIVE_ENABLED"
+  "AI" | "PAYMENTS_ENABLED" | "TXLINE_LIVE_ENABLED" | "GRANT_RESPONSE_DRIVE_URL"
 > & {
   AI: Ai;
   PAYMENTS_ENABLED: string;

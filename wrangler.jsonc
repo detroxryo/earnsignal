@@ -85,6 +85,7 @@
         "AI_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8",
         "AI_DAILY_CALL_LIMIT": "20",
         "MAX_DIRECT_COST_USD": "2",
+        "GRANT_RESPONSE_DRIVE_URL": "https://drive.google.com/file/d/1iyM3luqOC1NTXt4ao1sdT-FPnB8hOa5d/view?usp=sharing",
         "PAYMENTS_ENABLED": "false",
         "PAYMENT_NETWORK": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         "FACILITATOR_URL": "https://api.cdp.coinbase.com/platform/v2/x402",

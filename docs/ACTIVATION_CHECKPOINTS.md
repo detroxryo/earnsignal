@@ -16,6 +16,8 @@ The remaining wallet-bound work can be completed in one session. Do not paste a 
 
 After publication, set `GRANT_RESPONSE_DRIVE_URL` and `TXODDS_DEMO_URL` as non-secret Worker variables. Submission readiness also checks the D1 opportunity state and requires at least one captured TxLINE event, so completed checkpoints stop appearing as pending work.
 
+The Superteam Google OAuth checkpoint completed on 2026-07-19. The profile form is staged with the account name, `detroxryo`, China, and ten relevant development/content skills; profile creation remains an external submit checkpoint. The Grant PDF is uploaded to Drive, configured for anyone-with-the-link viewer access, and independently download-verified at 8,276 bytes. After profile creation, inspect the Grant form and stop for final application review before submission.
+
 ## Secret entry
 
 Run each command interactively. Wrangler prompts for the value and does not require it in shell history.
