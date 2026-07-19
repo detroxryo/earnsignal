@@ -5,6 +5,7 @@ import { fetchJson, stableId } from "../util";
 interface GitHubIssue {
   id: number;
   number?: number;
+  state?: string;
   html_url: string;
   comments_url?: string;
   comments?: number;
@@ -36,6 +37,7 @@ interface GitHubAuthoritySignals {
   totalPages: number;
   trustedComments: number;
   platformBotComments: number;
+  platformBots: string[];
   edgePagesCovered: boolean;
   complete: boolean;
 }
@@ -46,6 +48,7 @@ const AUTHORITY_ENRICHMENT_LIMIT = 2;
 const COMMENT_PAGE_SIZE = 30;
 const TRUSTED_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 const SUPPORTED_PLATFORM_BOTS = new Set(["opire-bot[bot]", "algora-pbc[bot]"]);
+const ALGORA_UNSUPPORTED_OPERATOR_COUNTRIES = new Set(["CN", "CHINA", "MAINLAND CHINA", "PRC"]);
 
 function rewardFromIssue(issue: GitHubIssue): number {
   const match = `${issue.title}\n${issue.body ?? ""}`.match(REWARD_PATTERN);
@@ -87,7 +90,11 @@ async function fetchAuthoritySignals(
     response.status === "fulfilled" ? response.value : [],
   ).map((comment) => [comment.id, comment])).values()];
   if (comments.length === 0) return undefined;
-  const platformBotComments = comments.filter(isSupportedPlatformBot).length;
+  const platformBotCommentsList = comments.filter(isSupportedPlatformBot);
+  const platformBotComments = platformBotCommentsList.length;
+  const platformBots = [...new Set(platformBotCommentsList.flatMap((comment) =>
+    comment.user ? [comment.user.login.toLowerCase()] : [],
+  ))].sort();
   const trustedComments = comments.filter((comment) =>
     TRUSTED_ASSOCIATIONS.has(comment.author_association) || isSupportedPlatformBot(comment)
   ).length;
@@ -98,6 +105,7 @@ async function fetchAuthoritySignals(
     totalPages,
     trustedComments,
     platformBotComments,
+    platformBots,
     edgePagesCovered: totalPages === 1
       ? successfulPages.includes(1)
       : successfulPages.includes(1) && successfulPages.includes(totalPages),
@@ -117,6 +125,9 @@ function authorityEvidence(signals: GitHubAuthoritySignals | undefined): string[
     signals.trustedComments > 0
       ? `Authority sample found ${signals.trustedComments} owner/member/collaborator or supported platform-bot comments (${signals.platformBotComments} platform-bot).`
       : "Authority sample found no owner/member/collaborator or supported platform-bot comments.",
+    ...(signals.platformBots.length > 0
+      ? [`Supported platform bots observed: ${signals.platformBots.join(", ")}.`]
+      : []),
   ];
 }
 
@@ -159,6 +170,12 @@ export async function discoverGitHub(env: AppBindings): Promise<NormalizedOpport
     const hasRewardEvidence = rewardUsd > 0;
     const hasPayoutProof = PAYOUT_PROOF_PATTERN.test(`${issue.title}\n${issue.body ?? ""}`);
     const authoritySignals = authorityByIssue.get(issue.id);
+    const operatorCountry = (env.OPERATOR_COUNTRY ?? "").trim().toUpperCase();
+    const sourceInactive = Boolean(issue.state && issue.state.toLowerCase() !== "open");
+    const algoraRegionIneligible = Boolean(
+      authoritySignals?.platformBots.includes("algora-pbc[bot]")
+      && ALGORA_UNSUPPORTED_OPERATOR_COUNTRIES.has(operatorCountry),
+    );
     const fullySampledWithoutAuthority = Boolean(
       authoritySignals
       && authoritySignals.commentCount >= 50
@@ -195,11 +212,25 @@ export async function discoverGitHub(env: AppBindings): Promise<NormalizedOpport
         repeatability: 0.65,
         technicalDifficulty: "MEDIUM",
         deadline: null,
-        hardRisks: hasPayoutProof ? [] : ["PAYOUT_UNVERIFIABLE"],
+        hardRisks: [
+          "PAYOUT_UNVERIFIABLE",
+          ...(algoraRegionIneligible ? ["REGION_INELIGIBLE" as const] : []),
+          ...(sourceInactive ? ["DEADLINE_INFEASIBLE" as const] : []),
+        ],
         evidence: [
           `GitHub labels: ${labels.join(", ") || "none"}`,
+          ...(issue.state ? [`GitHub issue state: ${issue.state.toLowerCase()}.`] : []),
           hasRewardEvidence ? `Reward text parsed as ${rewardUsd} USD.` : "No machine-verifiable reward amount found.",
-          hasPayoutProof ? "A public transaction proof link was found; human verification remains required." : "No public transaction proof link was found.",
+          hasPayoutProof
+            ? "A public transaction proof link was found, but a dedicated platform adapter must still verify funding, payout terms, and operator-region eligibility."
+            : "No public transaction proof link was found.",
+          "Generic GitHub discovery is fail-closed: platform funding and operator-region eligibility are not execution-verified.",
+          ...(sourceInactive
+            ? ["Official GitHub issue is not open; any cached bounty listing is stale and must not be executed."]
+            : []),
+          ...(algoraRegionIneligible
+            ? [`Algora payouts do not support configured operator country ${operatorCountry}; official support list checked 2026-07-19: https://algora.io/docs/payments#supported-countries-regions`]
+            : []),
           ...authorityEvidence(authoritySignals),
         ],
       },
