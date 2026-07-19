@@ -1,5 +1,10 @@
 import type { HardRiskFlag, NormalizedOpportunity, TechnicalDifficulty } from "../domain";
 import { fetchJson, stableId } from "../util";
+import {
+  canVerifyExecutionMarketEscrow,
+  MAX_EXECUTION_MARKET_ESCROW_CHECKS,
+  verifyExecutionMarketEscrow,
+} from "./execution-market-escrow";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -107,6 +112,11 @@ export async function discoverExecutionMarket(
       && publisher === "human"
       && task.is_public !== false;
   });
+  // Keep object identity here: duplicated external IDs must not expand the
+  // maximum number of proof requests beyond the bounded candidate slice.
+  const verificationCandidates = new Set(activeTasks
+    .filter(canVerifyExecutionMarketEscrow)
+    .slice(0, MAX_EXECUTION_MARKET_ESCROW_CHECKS));
 
   return Promise.all(activeTasks.flatMap((task) => {
     const externalId = text(task.id);
@@ -126,6 +136,14 @@ export async function discoverExecutionMarket(
     const competition = Math.min(0.95, 0.45 + applicationCount * 0.1);
     const netBountyUsd = Math.round(bountyUsd * 0.87 * 100) / 100;
     const officialUrl = `https://api.execution.market/api/v1/h2a/tasks/${encodeURIComponent(externalId)}`;
+    const escrowProof = verificationCandidates.has(task)
+      ? await verifyExecutionMarketEscrow(task)
+      : undefined;
+
+    if (escrowProof?.onChainValid && escrowProof.taskBindingValid) {
+      const payoutRisk = risks.indexOf("PAYOUT_UNVERIFIABLE");
+      if (payoutRisk >= 0) risks.splice(payoutRisk, 1);
+    }
 
     return {
       id: await stableId("opp", `EXECUTION_MARKET:${externalId}`),
@@ -145,8 +163,10 @@ export async function discoverExecutionMarket(
         directCostUsd: 0,
         gasUsd: 0,
         timeHours: hours,
-        payoutEvidence: historicalPayoutEvidence ? 0.85 : 0.35,
-        reputation: historicalPayoutEvidence ? 0.75 : 0.5,
+        payoutEvidence: escrowProof?.onChainValid && escrowProof.taskBindingValid
+          ? 0.95
+          : escrowProof?.onChainValid || historicalPayoutEvidence ? 0.65 : 0.35,
+        reputation: historicalPayoutEvidence ? 0.65 : 0.45,
         capitalSafety: 1,
         skillFit: DIGITAL_CATEGORIES.has(category) ? 0.9 : 0.65,
         deadlineFit: deadlineFit(deadline, hours, now),
@@ -158,8 +178,9 @@ export async function discoverExecutionMarket(
         evidence: [
           "Official public H2A API row is published for an AI executor and a human publisher.",
           TX_HASH_PATTERN.test(text(task.escrow_tx) ?? "") && USD_STABLECOINS.has(token)
-            ? `Platform reports escrow transaction ${text(task.escrow_tx)}; independent task-bound on-chain verification is not yet implemented.`
+            ? `Platform reports escrow transaction ${text(task.escrow_tx)}; payout remains blocked unless independent verification also proves task binding.`
             : "A valid supported-stablecoin escrow transaction hash is missing.",
+          ...(escrowProof?.evidence ?? []),
           historicalPayoutEvidence
             ? `Official public metrics report ${completedTasks} completed tasks and ${totalVolumeUsd.toFixed(2)} USD total payment volume (${totalFeesUsd.toFixed(2)} USD fees).`
             : "Historical platform payout volume was unavailable or zero during discovery.",
@@ -167,7 +188,7 @@ export async function discoverExecutionMarket(
           `Gross bounty ${bountyUsd.toFixed(2)} USD; the official 13% fee yields ${netBountyUsd.toFixed(2)} USD executor net.`,
         ],
       },
-      raw: { task, metrics },
+      raw: { task, metrics, escrowProof },
     } satisfies NormalizedOpportunity;
   }));
 }

@@ -28,6 +28,8 @@ The system never signs transactions, sends funds, deploys contracts, approves to
 - Hourly opportunity discovery from the authenticated Superteam Agent API, GitHub Search, CDP Bazaar, Execution Market H2A, and TaskBounty, plus a curated official-opportunity registry.
 - Deterministic 0–100 scoring with the mission's fixed weights and hard rejection rules.
 - Generic GitHub reward discovery is fail-closed until a dedicated platform adapter verifies funding, payout terms, and operator-region eligibility. Bounded platform-bot enrichment can add a more specific region rejection; production is configured for `CN`.
+- Execution Market escrow evidence is checked at most five times per discovery against its task payment timeline and Base mainnet transaction/receipt. The verifier requires the documented Facilitator, PaymentOperator, AuthCaptureEscrow, Base USDC, token collector, fee bounds, exact amount, successful receipt, authorization event, and transfer event. It deliberately retains `PAYOUT_UNVERIFIABLE`: the on-chain `PaymentInfo` contains a random salt but does not commit to the task UUID, so the platform-controlled timeline is not independent task binding.
+- TaskBounty candidates require authoritative detail state `OPEN` plus `FUNDED`; its list filter, list-level competition count, and arbitrary explorer URLs are never treated as payout proof.
 - D1 persistence for opportunities, evaluations, executions, ledger entries, reports, Cron idempotency, AI budgets, and captured TxLINE events.
 - Daily opportunity, execution, revenue, and improvement reports at 00:00 Asia/Shanghai (`0 16 * * *` UTC).
 - Secret-safe automation freshness checks for hourly discovery, daily Cron delivery, and the persisted daily report snapshot; missing or stale evidence produces a `DEGRADED` track instead of being hidden by a manual backfill.
@@ -148,6 +150,7 @@ Self-tests, internal transfers, testnet assets, excluded transactions, and pendi
 - [MatchPulse submission draft](./docs/TXODDS_SUBMISSION.md)
 - [Ethical outreach templates](./docs/OUTREACH.md)
 - [2026-07-17 opportunity, execution, revenue, and improvement report](./docs/REPORT_2026-07-17.md)
+- [2026-07-19 opportunity, execution, revenue, and improvement report](./docs/REPORT_2026-07-19.md)
 - [MatchPulse production dogfood QA](./docs/qa/MATCHPULSE_2026-07-17.md)
 
 ## License
