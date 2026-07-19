@@ -64,6 +64,127 @@ describe("activation readiness", () => {
     expect(result.x402.ready).toBe(false);
   });
 
+  it("reports Cron and daily report freshness independently", () => {
+    const now = new Date("2026-07-19T10:00:00.000Z");
+    const active = buildReadiness(env(), {
+      databaseReady: true,
+      txlineCapturedEvents: 0,
+      latestHourlyCronSucceededAt: "2026-07-19T08:00:00.000Z",
+      latestHourlyCronAttemptAt: "2026-07-19T08:00:00.000Z",
+      latestHourlyCronAttemptStatus: "SUCCEEDED",
+      latestDailyCronSucceededAt: "2026-07-18T16:00:00.000Z",
+      latestDailyCronAttemptAt: "2026-07-18T16:00:00.000Z",
+      latestDailyCronAttemptStatus: "SUCCEEDED",
+      latestReportSnapshotCreatedAt: "2026-07-19T09:00:00.000Z",
+      now,
+    });
+    expect(active.generatedAt).toBe(now.toISOString());
+    expect(active.automation.state).toBe("ACTIVE");
+    expect(active.automation.ready).toBe(true);
+
+    const degraded = buildReadiness(env(), {
+      databaseReady: true,
+      txlineCapturedEvents: 0,
+      latestHourlyCronSucceededAt: "2026-07-19T07:59:59.999Z",
+      latestReportSnapshotCreatedAt: "2026-07-19T09:00:00.000Z",
+      now,
+    });
+    expect(degraded.automation.state).toBe("DEGRADED");
+    expect(degraded.automation.checks.find((check) => check.id === "hourly_discovery_cron")?.ready)
+      .toBe(false);
+    expect(degraded.automation.checks.find((check) => check.id === "daily_report_cron")?.ready)
+      .toBe(false);
+    expect(degraded.automation.checks.find((check) => check.id === "daily_report_snapshot")?.ready)
+      .toBe(true);
+    expect(degraded.nextOperatorActions).toEqual(expect.arrayContaining([
+      "Redeploy the configured Cron Triggers and inspect recent hourly Cron Events.",
+      "Inspect the 0 16 * * * Cron Event and redeploy the configured triggers if no successful run appears.",
+    ]));
+  });
+
+  it("rejects invalid or implausibly future automation evidence", () => {
+    const result = buildReadiness(env(), {
+      databaseReady: true,
+      txlineCapturedEvents: 0,
+      latestHourlyCronSucceededAt: "not-a-date",
+      latestDailyCronSucceededAt: "2026-07-19T10:06:00.000Z",
+      latestReportSnapshotCreatedAt: "2026-07-19T10:05:00.000Z",
+      now: new Date("2026-07-19T10:00:00.000Z"),
+    });
+    expect(result.automation.checks.map((check) => check.ready)).toEqual([false, false, true]);
+  });
+
+  it("degrades immediately when the latest Cron attempt failed", () => {
+    const result = buildReadiness(env(), {
+      databaseReady: true,
+      txlineCapturedEvents: 0,
+      latestHourlyCronSucceededAt: "2026-07-19T09:00:00.000Z",
+      latestHourlyCronAttemptAt: "2026-07-19T10:00:00.000Z",
+      latestHourlyCronAttemptStatus: "FAILED",
+      latestDailyCronSucceededAt: "2026-07-18T16:00:00.000Z",
+      latestDailyCronAttemptAt: "2026-07-18T16:00:00.000Z",
+      latestDailyCronAttemptStatus: "SUCCEEDED",
+      latestReportSnapshotCreatedAt: "2026-07-19T09:00:00.000Z",
+      now: new Date("2026-07-19T10:01:00.000Z"),
+    });
+    const hourly = result.automation.checks.find((check) => check.id === "hourly_discovery_cron");
+    expect(result.automation.state).toBe("DEGRADED");
+    expect(hourly).toMatchObject({
+      ready: false,
+      observedAt: "2026-07-19T09:00:00.000Z",
+      latestAttemptAt: "2026-07-19T10:00:00.000Z",
+      latestAttemptStatus: "FAILED",
+    });
+  });
+
+  it("allows a recent running attempt but degrades one running for over 15 minutes", () => {
+    const base = {
+      databaseReady: true,
+      txlineCapturedEvents: 0,
+      latestHourlyCronSucceededAt: "2026-07-19T09:00:00.000Z",
+      latestHourlyCronAttemptStatus: "RUNNING" as const,
+      latestDailyCronSucceededAt: "2026-07-18T16:00:00.000Z",
+      latestDailyCronAttemptAt: "2026-07-18T16:00:00.000Z",
+      latestDailyCronAttemptStatus: "SUCCEEDED" as const,
+      latestReportSnapshotCreatedAt: "2026-07-19T09:00:00.000Z",
+      now: new Date("2026-07-19T10:00:00.000Z"),
+    };
+    const recent = buildReadiness(env(), {
+      ...base,
+      latestHourlyCronAttemptAt: "2026-07-19T09:45:00.000Z",
+    });
+    const stale = buildReadiness(env(), {
+      ...base,
+      latestHourlyCronAttemptAt: "2026-07-19T09:44:59.999Z",
+    });
+    expect(recent.automation.state).toBe("ACTIVE");
+    expect(stale.automation.state).toBe("DEGRADED");
+  });
+
+  it("uses an inclusive 26-hour boundary for daily automation", () => {
+    const base = {
+      databaseReady: true,
+      txlineCapturedEvents: 0,
+      latestHourlyCronSucceededAt: "2026-07-19T09:00:00.000Z",
+      latestHourlyCronAttemptAt: "2026-07-19T09:00:00.000Z",
+      latestHourlyCronAttemptStatus: "SUCCEEDED" as const,
+      latestDailyCronSucceededAt: "2026-07-18T08:00:00.000Z",
+      latestDailyCronAttemptAt: "2026-07-18T08:00:00.000Z",
+      latestDailyCronAttemptStatus: "SUCCEEDED" as const,
+      now: new Date("2026-07-19T10:00:00.000Z"),
+    };
+    expect(buildReadiness(env(), {
+      ...base,
+      latestReportSnapshotCreatedAt: "2026-07-18T08:00:00.000Z",
+    }).automation.state).toBe("ACTIVE");
+    expect(buildReadiness(env(), {
+      ...base,
+      latestDailyCronSucceededAt: "2026-07-18T07:59:59.999Z",
+      latestDailyCronAttemptAt: "2026-07-18T07:59:59.999Z",
+      latestReportSnapshotCreatedAt: "2026-07-18T08:00:00.000Z",
+    }).automation.state).toBe("DEGRADED");
+  });
+
   it("uses persisted evidence for the human submission gates", () => {
     const result = buildReadiness(env({
       TXLINE_GUEST_JWT: "guest-jwt-secret",

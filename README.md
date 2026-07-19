@@ -9,7 +9,7 @@ The system never signs transactions, sends funds, deploys contracts, approves to
 - Production API: <https://earnsignal.detroxryo.workers.dev>
 - MatchPulse: <https://earnsignal.detroxryo.workers.dev/matchpulse>
 - Operator console: <https://earnsignal.detroxryo.workers.dev/admin> (Bearer-protected data)
-- Current public status: payments and TxLINE live capture remain disabled until their human wallet checkpoints are completed; discovery, scoring, Workers AI, reports, and both Cron triggers are live.
+- Current public status: payments and TxLINE live capture remain disabled until their human wallet checkpoints are completed; discovery, scoring, Workers AI, and reports are live. Both Cron triggers are deployed, and the protected readiness endpoint independently monitors their successful delivery and report freshness.
 
 ## 60-second reviewer path
 
@@ -27,6 +27,7 @@ The system never signs transactions, sends funds, deploys contracts, approves to
 - Deterministic 0–100 scoring with the mission's fixed weights and hard rejection rules.
 - D1 persistence for opportunities, evaluations, executions, ledger entries, reports, Cron idempotency, AI budgets, and captured TxLINE events.
 - Daily opportunity, execution, revenue, and improvement reports at 00:00 Asia/Shanghai (`0 16 * * *` UTC).
+- Secret-safe automation freshness checks for hourly discovery, daily Cron delivery, and the persisted daily report snapshot; missing or stale evidence produces a `DEGRADED` track instead of being hidden by a manual backfill.
 - Workers AI bilingual explanations using `@cf/qwen/qwen3-30b-a3b-fp8`, with low temperature, bounded inputs, a D1-enforced daily budget, and deterministic fallback.
 - Solana x402 `exact` payment middleware for a $0.10 evaluation and a $5 full implementation plan.
 - Settlement-ledger deduplication by chain and transaction hash; self-payments and controlled payer addresses are excluded from revenue.
@@ -47,7 +48,7 @@ The system never signs transactions, sends funds, deploys contracts, approves to
 | POST | `/v1/matchpulse/brief` | Public | Bilingual, no-betting event explanation |
 | GET | `/admin` | Public shell | Browser operator console; protected data still requires Bearer auth |
 | GET | `/admin/reports/daily` | Bearer | Four daily reports |
-| GET | `/admin/readiness` | Bearer | Secret-safe activation checklist for x402, TxLINE, and submissions |
+| GET | `/admin/readiness` | Bearer | Secret-safe activation and Cron/report freshness checklist |
 | POST | `/admin/discovery/run` | Bearer | Manual discovery trigger |
 | POST | `/admin/reports/generate` | Bearer | Idempotent daily report generation |
 | POST | `/admin/matchpulse/capture/:fixtureId` | Bearer | Capture official TxLINE score events |

@@ -13,6 +13,7 @@ import { assertTransition, cronExecutionKey, executionStates, type ExecutionStat
 import { MATCHPULSE_HTML } from "./matchpulse-page";
 import { capturePaymentSettlement, requireX402 } from "./payments";
 import { buildReadiness } from "./readiness";
+import type { CronRunStatus } from "./readiness";
 import { generateDailyReport, getLatestDailyReport } from "./reports";
 import { scoreOpportunity } from "./scoring";
 import {
@@ -209,8 +210,19 @@ app.get("/admin/readiness", async (context) => {
   let grantStatus: string | undefined;
   let txoddsStatus: string | undefined;
   let txlineCapturedEvents = 0;
+  let latestHourlyCronSucceededAt: string | undefined;
+  let latestHourlyCronAttemptAt: string | undefined;
+  let latestHourlyCronAttemptStartedAt: string | undefined;
+  let latestHourlyCronAttemptFinishedAt: string | undefined;
+  let latestHourlyCronAttemptStatus: CronRunStatus | undefined;
+  let latestDailyCronSucceededAt: string | undefined;
+  let latestDailyCronAttemptAt: string | undefined;
+  let latestDailyCronAttemptStartedAt: string | undefined;
+  let latestDailyCronAttemptFinishedAt: string | undefined;
+  let latestDailyCronAttemptStatus: CronRunStatus | undefined;
+  let latestReportSnapshotCreatedAt: string | undefined;
   try {
-    const [grant, txodds, captured] = await Promise.all([
+    const [grant, txodds, captured, automation] = await Promise.all([
       context.env.DB.prepare(
         "SELECT status FROM opportunities WHERE official_url = ? LIMIT 1",
       ).bind("https://superteam.fun/earn/grants/agentic-engineering").first<{ status: string }>(),
@@ -221,11 +233,58 @@ app.get("/admin/readiness", async (context) => {
         "https://superteam.fun/earn/listing/consumer-and-fan-experiences/",
       ).first<{ status: string }>(),
       context.env.DB.prepare("SELECT COUNT(*) AS count FROM txline_events").first<{ count: number }>(),
+      context.env.DB.prepare(`
+        SELECT
+          (SELECT MAX(scheduled_at) FROM cron_runs
+            WHERE cron = '0 * * * *' AND status = 'SUCCEEDED') AS latestHourlyCronSucceededAt,
+          (SELECT scheduled_at FROM cron_runs
+            WHERE cron = '0 * * * *' ORDER BY scheduled_at DESC LIMIT 1) AS latestHourlyCronAttemptAt,
+          (SELECT started_at FROM cron_runs
+            WHERE cron = '0 * * * *' ORDER BY scheduled_at DESC LIMIT 1) AS latestHourlyCronAttemptStartedAt,
+          (SELECT finished_at FROM cron_runs
+            WHERE cron = '0 * * * *' ORDER BY scheduled_at DESC LIMIT 1) AS latestHourlyCronAttemptFinishedAt,
+          (SELECT status FROM cron_runs
+            WHERE cron = '0 * * * *' ORDER BY scheduled_at DESC LIMIT 1) AS latestHourlyCronAttemptStatus,
+          (SELECT MAX(scheduled_at) FROM cron_runs
+            WHERE cron = '0 16 * * *' AND status = 'SUCCEEDED') AS latestDailyCronSucceededAt,
+          (SELECT scheduled_at FROM cron_runs
+            WHERE cron = '0 16 * * *' ORDER BY scheduled_at DESC LIMIT 1) AS latestDailyCronAttemptAt,
+          (SELECT started_at FROM cron_runs
+            WHERE cron = '0 16 * * *' ORDER BY scheduled_at DESC LIMIT 1) AS latestDailyCronAttemptStartedAt,
+          (SELECT finished_at FROM cron_runs
+            WHERE cron = '0 16 * * *' ORDER BY scheduled_at DESC LIMIT 1) AS latestDailyCronAttemptFinishedAt,
+          (SELECT status FROM cron_runs
+            WHERE cron = '0 16 * * *' ORDER BY scheduled_at DESC LIMIT 1) AS latestDailyCronAttemptStatus,
+          (SELECT MAX(created_at) FROM report_snapshots) AS latestReportSnapshotCreatedAt
+      `).first<{
+        latestHourlyCronSucceededAt: string | null;
+        latestHourlyCronAttemptAt: string | null;
+        latestHourlyCronAttemptStartedAt: string | null;
+        latestHourlyCronAttemptFinishedAt: string | null;
+        latestHourlyCronAttemptStatus: CronRunStatus | null;
+        latestDailyCronSucceededAt: string | null;
+        latestDailyCronAttemptAt: string | null;
+        latestDailyCronAttemptStartedAt: string | null;
+        latestDailyCronAttemptFinishedAt: string | null;
+        latestDailyCronAttemptStatus: CronRunStatus | null;
+        latestReportSnapshotCreatedAt: string | null;
+      }>(),
     ]);
     databaseReady = true;
     grantStatus = grant?.status;
     txoddsStatus = txodds?.status;
     txlineCapturedEvents = captured?.count ?? 0;
+    latestHourlyCronSucceededAt = automation?.latestHourlyCronSucceededAt ?? undefined;
+    latestHourlyCronAttemptAt = automation?.latestHourlyCronAttemptAt ?? undefined;
+    latestHourlyCronAttemptStartedAt = automation?.latestHourlyCronAttemptStartedAt ?? undefined;
+    latestHourlyCronAttemptFinishedAt = automation?.latestHourlyCronAttemptFinishedAt ?? undefined;
+    latestHourlyCronAttemptStatus = automation?.latestHourlyCronAttemptStatus ?? undefined;
+    latestDailyCronSucceededAt = automation?.latestDailyCronSucceededAt ?? undefined;
+    latestDailyCronAttemptAt = automation?.latestDailyCronAttemptAt ?? undefined;
+    latestDailyCronAttemptStartedAt = automation?.latestDailyCronAttemptStartedAt ?? undefined;
+    latestDailyCronAttemptFinishedAt = automation?.latestDailyCronAttemptFinishedAt ?? undefined;
+    latestDailyCronAttemptStatus = automation?.latestDailyCronAttemptStatus ?? undefined;
+    latestReportSnapshotCreatedAt = automation?.latestReportSnapshotCreatedAt ?? undefined;
   } catch {
     databaseReady = false;
   }
@@ -234,6 +293,17 @@ app.get("/admin/readiness", async (context) => {
     grantStatus,
     txoddsStatus,
     txlineCapturedEvents,
+    latestHourlyCronSucceededAt,
+    latestHourlyCronAttemptAt,
+    latestHourlyCronAttemptStartedAt,
+    latestHourlyCronAttemptFinishedAt,
+    latestHourlyCronAttemptStatus,
+    latestDailyCronSucceededAt,
+    latestDailyCronAttemptAt,
+    latestDailyCronAttemptStartedAt,
+    latestDailyCronAttemptFinishedAt,
+    latestDailyCronAttemptStatus,
+    latestReportSnapshotCreatedAt,
   }));
 });
 app.post("/admin/discovery/run", async (context) => context.json(await runDiscovery(context.env)));
