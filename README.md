@@ -25,7 +25,7 @@ The system never signs transactions, sends funds, deploys contracts, approves to
 
 ## What is implemented
 
-- Hourly opportunity discovery from the authenticated Superteam Agent API, GitHub Search, and CDP Bazaar, plus a curated official-opportunity registry.
+- Hourly opportunity discovery from the authenticated Superteam Agent API, GitHub Search, CDP Bazaar, Execution Market H2A, and TaskBounty, plus a curated official-opportunity registry.
 - Deterministic 0–100 scoring with the mission's fixed weights and hard rejection rules.
 - Generic GitHub reward discovery is fail-closed until a dedicated platform adapter verifies funding, payout terms, and operator-region eligibility. Bounded platform-bot enrichment can add a more specific region rejection; production is configured for `CN`.
 - D1 persistence for opportunities, evaluations, executions, ledger entries, reports, Cron idempotency, AI budgets, and captured TxLINE events.
