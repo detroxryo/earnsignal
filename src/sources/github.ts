@@ -30,6 +30,20 @@ interface GitHubComment {
   } | null;
 }
 
+interface GitHubTimelineEvent {
+  event?: string;
+  source?: {
+    issue?: {
+      id?: number;
+      number?: number;
+      state?: string;
+      html_url?: string;
+      repository_url?: string;
+      pull_request?: unknown;
+    };
+  };
+}
+
 interface GitHubAuthoritySignals {
   commentCount: number;
   sampledComments: number;
@@ -42,10 +56,26 @@ interface GitHubAuthoritySignals {
   complete: boolean;
 }
 
+interface GitHubCompetitionSignals {
+  status: "COMPLETE" | "INCOMPLETE" | "UNAVAILABLE" | "NOT_ENRICHED";
+  sampledEvents: number;
+  sampledPages: number[];
+  totalPages: number | null;
+  linkedPullRequests: number;
+  openLinkedPullRequests: number;
+  potentiallyOpenPullRequests: number;
+  unclassifiablePullRequestReferences: number;
+  ignoredCrossRepositoryPullRequests: number;
+  linkedPullRequestUrls: string[];
+  openLinkedPullRequestUrls: string[];
+  potentiallyOpenPullRequestUrls: string[];
+}
+
 const REWARD_PATTERN = /(?:\$\s*|USD(?:C|T|G)?\s*)(\d{1,7}(?:\.\d{1,2})?)([km])?|(?:\b(\d{1,7}(?:\.\d{1,2})?)([km])?\s*USD(?:C|T|G)?\b)/i;
 const PAYOUT_PROOF_PATTERN = /(?:explorer\.solana\.com|basescan\.org|etherscan\.io)\/tx\//i;
 const AUTHORITY_ENRICHMENT_LIMIT = 2;
 const COMMENT_PAGE_SIZE = 30;
+const TIMELINE_PAGE_SIZE = 100;
 const TRUSTED_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 const SUPPORTED_PLATFORM_BOTS = new Set(["opire-bot[bot]", "algora-pbc[bot]"]);
 const ALGORA_UNSUPPORTED_OPERATOR_COUNTRIES = new Set(["CN", "CHINA", "MAINLAND CHINA", "PRC"]);
@@ -113,6 +143,162 @@ async function fetchAuthoritySignals(
   };
 }
 
+async function fetchCompetitionSignals(
+  issue: GitHubIssue,
+  headers: Headers,
+): Promise<GitHubCompetitionSignals> {
+  if (!issue.number || !issue.repository_url) return emptyCompetitionSignals("UNAVAILABLE");
+  const firstUrl = new URL(`${issue.repository_url}/issues/${issue.number}/timeline`);
+  firstUrl.searchParams.set("per_page", String(TIMELINE_PAGE_SIZE));
+  firstUrl.searchParams.set("page", "1");
+  const first = await fetchTimelinePage(firstUrl, headers);
+  const totalPages = timelineLastPage(first.linkHeader, first.events.length);
+  const sampledPages = [1];
+  const pages = [first.events];
+  let lastPageAvailable = true;
+  if (totalPages !== null && totalPages > 1) {
+    const lastUrl = new URL(firstUrl);
+    lastUrl.searchParams.set("page", String(totalPages));
+    try {
+      const last = await fetchTimelinePage(lastUrl, headers);
+      sampledPages.push(totalPages);
+      pages.push(last.events);
+    } catch {
+      lastPageAvailable = false;
+    }
+  }
+  const events = pages.flat();
+  const targetRepository = canonicalRepositoryUrl(issue.repository_url);
+  const ignoredCrossRepository = new Set<string>();
+  const unclassifiable = new Set<string>();
+  const unboundPotential = new Set<string>();
+  const linkedByUrl = new Map<string, NonNullable<GitHubTimelineEvent["source"]>["issue"]>();
+  for (const [eventIndex, event] of events.entries()) {
+    const source = event.source?.issue;
+    if (event.event !== "cross-referenced" || !source) continue;
+    const htmlUrl = typeof source.html_url === "string" ? source.html_url : undefined;
+    const looksLikePullRequest = source.pull_request !== undefined || htmlUrl?.includes("/pull/");
+    if (!looksLikePullRequest) continue;
+    const key = htmlUrl
+      ?? (source.id !== undefined
+        ? `id:${source.id}`
+        : source.number !== undefined ? `number:${source.number}` : `unknown:${eventIndex}`);
+    if (!htmlUrl?.includes("/pull/")) {
+      unclassifiable.add(key);
+      unboundPotential.add(key);
+      continue;
+    }
+    const sourceRepository = canonicalRepositoryUrl(source.repository_url);
+    if (!sourceRepository) {
+      unclassifiable.add(key);
+      unboundPotential.add(key);
+      continue;
+    }
+    if (!targetRepository || sourceRepository !== targetRepository) {
+      ignoredCrossRepository.add(key);
+      continue;
+    }
+    linkedByUrl.set(htmlUrl, source);
+    const state = source.state?.toLowerCase();
+    if (state !== "open" && state !== "closed") unclassifiable.add(key);
+  }
+  const linked = [...linkedByUrl.values()];
+  const open = linked.filter((pullRequest) => pullRequest?.state?.toLowerCase() === "open");
+  const potentiallyOpenLinked = linked.filter((pullRequest) =>
+    pullRequest?.state?.toLowerCase() !== "closed"
+  );
+  const potentiallyOpenKeys = new Set([
+    ...potentiallyOpenLinked.flatMap((pullRequest) => pullRequest?.html_url ? [pullRequest.html_url] : []),
+    ...unboundPotential,
+  ]);
+  const potentiallyOpenUrls = [...potentiallyOpenKeys].filter((key) => key.startsWith("https://"));
+  const potentiallyOpenPullRequests = potentiallyOpenKeys.size;
+  const complete = totalPages !== null
+    && totalPages <= 2
+    && lastPageAvailable
+    && unclassifiable.size === 0;
+  return {
+    status: complete ? "COMPLETE" : "INCOMPLETE",
+    sampledEvents: events.length,
+    sampledPages,
+    totalPages,
+    linkedPullRequests: linked.length,
+    openLinkedPullRequests: open.length,
+    potentiallyOpenPullRequests,
+    unclassifiablePullRequestReferences: unclassifiable.size,
+    ignoredCrossRepositoryPullRequests: ignoredCrossRepository.size,
+    linkedPullRequestUrls: linked.flatMap((pullRequest) => pullRequest?.html_url ? [pullRequest.html_url] : []).sort(),
+    openLinkedPullRequestUrls: open.flatMap((pullRequest) => pullRequest?.html_url ? [pullRequest.html_url] : []).sort(),
+    potentiallyOpenPullRequestUrls: potentiallyOpenUrls.sort(),
+  };
+}
+
+function emptyCompetitionSignals(
+  status: "UNAVAILABLE" | "NOT_ENRICHED",
+): GitHubCompetitionSignals {
+  return {
+    status,
+    sampledEvents: 0,
+    sampledPages: [],
+    totalPages: null,
+    linkedPullRequests: 0,
+    openLinkedPullRequests: 0,
+    potentiallyOpenPullRequests: 0,
+    unclassifiablePullRequestReferences: 0,
+    ignoredCrossRepositoryPullRequests: 0,
+    linkedPullRequestUrls: [],
+    openLinkedPullRequestUrls: [],
+    potentiallyOpenPullRequestUrls: [],
+  };
+}
+
+async function fetchTimelinePage(
+  url: URL,
+  headers: Headers,
+): Promise<{ events: GitHubTimelineEvent[]; linkHeader: string | null }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort("upstream timeout"), 10_000);
+  try {
+    const response = await fetch(url.toString(), { headers, signal: controller.signal });
+    if (!response.ok) throw new Error(`upstream ${response.status} from ${url.hostname}`);
+    const body: unknown = await response.json();
+    if (!Array.isArray(body)) throw new Error("invalid GitHub timeline response");
+    return { events: body as GitHubTimelineEvent[], linkHeader: response.headers.get("link") };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function timelineLastPage(linkHeader: string | null, firstPageSize: number): number | null {
+  let hasNext = false;
+  if (linkHeader) {
+    for (const part of linkHeader.split(",")) {
+      if (/;\s*rel="next"\s*$/.test(part.trim())) hasNext = true;
+      if (!/;\s*rel="last"\s*$/.test(part.trim())) continue;
+      const match = part.match(/^\s*<([^>]+)>/);
+      if (!match?.[1]) continue;
+      const url = new URL(match[1]);
+      if (url.protocol !== "https:" || url.hostname !== "api.github.com") continue;
+      const page = Number(url.searchParams.get("page"));
+      if (Number.isSafeInteger(page) && page >= 1) return page;
+    }
+  }
+  if (hasNext) return null;
+  return firstPageSize < TIMELINE_PAGE_SIZE ? 1 : null;
+}
+
+function canonicalRepositoryUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.hostname !== "api.github.com") return null;
+    const path = url.pathname.replace(/\/+$/, "").toLowerCase();
+    return /^\/repos\/[^/]+\/[^/]+$/.test(path) ? `https://api.github.com${path}` : null;
+  } catch {
+    return null;
+  }
+}
+
 function authorityEvidence(signals: GitHubAuthoritySignals | undefined): string[] {
   if (!signals) return [];
   const scope = signals.complete
@@ -129,6 +315,61 @@ function authorityEvidence(signals: GitHubAuthoritySignals | undefined): string[
       ? [`Supported platform bots observed: ${signals.platformBots.join(", ")}.`]
       : []),
   ];
+}
+
+function competitionEvidence(signals: GitHubCompetitionSignals | undefined): string[] {
+  if (!signals || signals.status === "NOT_ENRICHED") {
+    return ["GitHub timeline competition was not sampled within the bounded top-two enrichment window; conservative fallback applied."];
+  }
+  if (signals.status === "UNAVAILABLE") {
+    return ["GitHub timeline competition evidence was unavailable; conservative fallback applied."];
+  }
+  const scope = signals.status === "COMPLETE"
+    ? `${signals.sampledEvents} complete timeline events`
+    : `${signals.sampledEvents} events from bounded timeline pages ${signals.sampledPages.join(", ")} of ${signals.totalPages ?? "unknown"}`;
+  return [
+    `GitHub ${scope} contain ${signals.linkedPullRequests} linked same-repository pull requests (${signals.openLinkedPullRequests} confirmed open; ${signals.potentiallyOpenPullRequests} potentially open including incomplete evidence).`,
+    ...(signals.status === "INCOMPLETE"
+      ? ["GitHub timeline sampling was incomplete; conservative fallback applied to unobserved competition."]
+      : []),
+    ...(signals.ignoredCrossRepositoryPullRequests > 0
+      ? [`Ignored ${signals.ignoredCrossRepositoryPullRequests} cross-repository pull-request references as unverified potential competition.`]
+      : []),
+    ...(signals.unclassifiablePullRequestReferences > 0
+      ? [`Detected ${signals.unclassifiablePullRequestReferences} unclassifiable pull-request references; treated as potentially open and the sample as incomplete.`]
+      : []),
+    ...(signals.potentiallyOpenPullRequestUrls.length > 0
+      ? [`Potential competing pull requests: ${signals.potentiallyOpenPullRequestUrls.join(", ")}.`]
+      : []),
+  ];
+}
+
+function githubCompetitionLevel(
+  commentCount: number,
+  signals: GitHubCompetitionSignals | undefined,
+): number {
+  const potentialPullRequests = signals?.potentiallyOpenPullRequests ?? 0;
+  const pullRequestPenalty = potentialPullRequests >= 2 ? 0.98 : potentialPullRequests === 1 ? 0.92 : 0.7;
+  const commentPenalty = commentCount >= 50 ? 0.95 : commentCount >= 20 ? 0.85 : 0.7;
+  const statusPenalty = !signals || signals.status !== "COMPLETE" ? 0.9 : 0.7;
+  return Math.max(pullRequestPenalty, commentPenalty, statusPenalty);
+}
+
+function githubSuccessProbability(
+  hasRewardEvidence: boolean,
+  fullySampledWithoutAuthority: boolean,
+  signals: GitHubCompetitionSignals | undefined,
+): number {
+  const authorityProbability = fullySampledWithoutAuthority
+    ? 0.05
+    : hasRewardEvidence ? 0.2 : 0.05;
+  const potentialPullRequests = signals?.potentiallyOpenPullRequests ?? 0;
+  const competitionProbability = potentialPullRequests >= 2
+    ? 0.02
+    : potentialPullRequests === 1
+      ? 0.08
+      : signals?.status === "COMPLETE" ? 0.2 : 0.05;
+  return Math.min(authorityProbability, competitionProbability);
 }
 
 export async function discoverGitHub(env: AppBindings): Promise<NormalizedOpportunity[]> {
@@ -149,18 +390,23 @@ export async function discoverGitHub(env: AppBindings): Promise<NormalizedOpport
   );
   const unique = [...new Map(issues.map((issue) => [issue.id, issue])).values()];
   const authorityByIssue = new Map<number, GitHubAuthoritySignals>();
+  const competitionByIssue = new Map<number, GitHubCompetitionSignals>();
   const enrichmentCandidates = unique
-    .filter((issue) => rewardFromIssue(issue) > 0 && (issue.comments ?? 0) > 0 && issue.comments_url)
+    .filter((issue) => rewardFromIssue(issue) > 0)
     .sort((left, right) => rewardFromIssue(right) - rewardFromIssue(left))
     .slice(0, AUTHORITY_ENRICHMENT_LIMIT);
-  const enriched = await Promise.allSettled(enrichmentCandidates.map(async (issue) => ({
-    issue,
-    signals: await fetchAuthoritySignals(issue, headers),
-  })));
+  const enriched = await Promise.allSettled(enrichmentCandidates.map(async (issue) => {
+    const [authority, competition] = await Promise.all([
+      fetchAuthoritySignals(issue, headers).catch(() => undefined),
+      fetchCompetitionSignals(issue, headers).catch(() => emptyCompetitionSignals("UNAVAILABLE")),
+    ]);
+    return { issue, authority, competition };
+  }));
   for (const result of enriched) {
     if (result.status === "fulfilled") {
-      const { issue, signals } = result.value;
-      if (signals) authorityByIssue.set(issue.id, signals);
+      const { issue, authority, competition } = result.value;
+      if (authority) authorityByIssue.set(issue.id, authority);
+      if (competition) competitionByIssue.set(issue.id, competition);
     }
   }
 
@@ -170,6 +416,8 @@ export async function discoverGitHub(env: AppBindings): Promise<NormalizedOpport
     const hasRewardEvidence = rewardUsd > 0;
     const hasPayoutProof = PAYOUT_PROOF_PATTERN.test(`${issue.title}\n${issue.body ?? ""}`);
     const authoritySignals = authorityByIssue.get(issue.id);
+    const competitionSignals = competitionByIssue.get(issue.id)
+      ?? emptyCompetitionSignals("NOT_ENRICHED");
     const operatorCountry = (env.OPERATOR_COUNTRY ?? "").trim().toUpperCase();
     const sourceInactive = Boolean(issue.state && issue.state.toLowerCase() !== "open");
     const algoraRegionIneligible = Boolean(
@@ -197,7 +445,11 @@ export async function discoverGitHub(env: AppBindings): Promise<NormalizedOpport
         source: "GITHUB",
         officialUrl: issue.html_url,
         rewardUsd,
-        successProbability: fullySampledWithoutAuthority ? 0.05 : hasRewardEvidence ? 0.2 : 0.05,
+        successProbability: githubSuccessProbability(
+          hasRewardEvidence,
+          fullySampledWithoutAuthority,
+          competitionSignals,
+        ),
         directCostUsd: 0,
         gasUsd: 0,
         timeHours: 6,
@@ -206,9 +458,7 @@ export async function discoverGitHub(env: AppBindings): Promise<NormalizedOpport
         capitalSafety: 1,
         skillFit: 0.75,
         deadlineFit: 0.7,
-        competitionLevel: (issue.comments ?? 0) >= 50
-          ? 0.95
-          : (issue.comments ?? 0) >= 20 ? 0.85 : 0.7,
+        competitionLevel: githubCompetitionLevel(issue.comments ?? 0, competitionSignals),
         repeatability: 0.65,
         technicalDifficulty: "MEDIUM",
         deadline: null,
@@ -232,9 +482,10 @@ export async function discoverGitHub(env: AppBindings): Promise<NormalizedOpport
             ? [`Algora payouts do not support configured operator country ${operatorCountry}; official support list checked 2026-07-19: https://algora.io/docs/payments#supported-countries-regions`]
             : []),
           ...authorityEvidence(authoritySignals),
+          ...competitionEvidence(competitionSignals),
         ],
       },
-      raw: { issue, authoritySignals },
+      raw: { issue, authoritySignals, competitionSignals },
     } satisfies NormalizedOpportunity;
   }));
 }
