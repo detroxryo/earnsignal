@@ -9,6 +9,7 @@ import { discoverGitHub } from "./sources/github";
 import { discoverSuperteam } from "./sources/superteam";
 import { discoverExecutionMarket } from "./sources/execution-market";
 import { discoverTaskBounty } from "./sources/taskbounty";
+import { discoverOpire } from "./sources/opire";
 import { logEvent } from "./util";
 
 export interface DiscoverySummary {
@@ -26,6 +27,7 @@ export async function runDiscovery(env: AppBindings): Promise<DiscoverySummary> 
     { name: "CDP_BAZAAR", run: () => discoverBazaar(env) },
     { name: "EXECUTION_MARKET", run: () => discoverExecutionMarket() },
     { name: "TASKBOUNTY", run: () => discoverTaskBounty() },
+    { name: "OPIRE", run: () => discoverOpire(env) },
   ];
   const settled = await Promise.allSettled(sources.map((source) => source.run()));
   const sourceErrors: DiscoverySummary["sourceErrors"] = [];
